@@ -47,15 +47,16 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * This graph contains a set of {@link ChannelConversion}s.
@@ -168,7 +169,7 @@ public class ChannelConversionGraph {
         final Tree firstTree = iterator.next();
         Bitmask combinationSettledIndices = new Bitmask(firstTree.settledDestinationIndices);
         int maxSettledIndices = combinationSettledIndices.cardinality();
-        final HashSet<ChannelDescriptor> employedChannelDescriptors = new HashSet<>(firstTree.employedChannelDescriptors);
+        final LinkedHashSet<ChannelDescriptor> employedChannelDescriptors = new LinkedHashSet<>(firstTree.employedChannelDescriptors);
         int maxVisitedChannelDescriptors = employedChannelDescriptors.size();
         double costs = firstTree.costs;
         TreeVertex newRoot = new TreeVertex(firstTree.root.channelDescriptor, firstTree.root.settledIndices);
@@ -222,7 +223,11 @@ public class ChannelConversionGraph {
 
         @Override
         public Tree select(Tree t1, Tree t2) {
-            return t1.costs <= t2.costs ? t1 : t2;
+            int cmp = Double.compare(t1.costs, t2.costs);
+            if (cmp == 0) {
+                cmp = t1.getDeterministicSignature().compareTo(t2.getDeterministicSignature());
+            }
+            return cmp <= 0 ? t1 : t2;
         }
 
     }
@@ -381,7 +386,7 @@ public class ChannelConversionGraph {
                 this.existingDestinationChannelIndices = new Bitmask();
 
                 this.collectExistingChannels(sourceChannel);
-                this.openChannelDescriptors = new HashSet<>(openChannels.size());
+                this.openChannelDescriptors = new LinkedHashSet<>(openChannels.size());
                 for (Channel openChannel : openChannels) {
                     this.openChannelDescriptors.add(openChannel.getDescriptor());
                 }
@@ -477,7 +482,9 @@ public class ChannelConversionGraph {
             final List<ChannelDescriptor> supportedInputChannels = owner.getSupportedInputChannels(input.getIndex());
             if (input.isLoopInvariant()) {
                 // Loop input is needed in several iterations and must therefore be reusable.
-                return supportedInputChannels.stream().filter(ChannelDescriptor::isReusable).collect(Collectors.toSet());
+                return supportedInputChannels.stream()
+                        .filter(ChannelDescriptor::isReusable)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
             } else {
                 return WayangCollections.asSet(supportedInputChannels);
             }
@@ -546,7 +553,7 @@ public class ChannelConversionGraph {
                 }
                 if (channelDescriptors.size() - numReusableChannels == 1) {
                     iterator.remove();
-                    channelDescriptors = new HashSet<>(channelDescriptors);
+                    channelDescriptors = new LinkedHashSet<>(channelDescriptors);
                     channelDescriptors.removeIf(channelDescriptor -> !channelDescriptor.isReusable());
                     kernelDestChannelDescriptorSetsToIndicesUpdates.add(new Tuple<>(channelDescriptors, indices));
                 }
@@ -575,7 +582,7 @@ public class ChannelConversionGraph {
          */
         private Tree searchTree() {
             // Prepare the recursive traversal.
-            final HashSet<ChannelDescriptor> visitedChannelDescriptors = new HashSet<>(16);
+            final LinkedHashSet<ChannelDescriptor> visitedChannelDescriptors = new LinkedHashSet<>(16);
             visitedChannelDescriptors.add(this.sourceChannelDescriptor);
 
             // Perform the traversal.
@@ -777,7 +784,7 @@ public class ChannelConversionGraph {
             final Channel channel = this.existingChannels.get(descriptor);
             if (channel == null || this.openChannelDescriptors.contains(descriptor)) return null;
 
-            Set<ChannelDescriptor> result = new HashSet<>();
+            Set<ChannelDescriptor> result = new LinkedHashSet<>();
             for (ExecutionTask consumer : channel.getConsumers()) {
                 if (!consumer.getOperator().isAuxiliary()) continue;
                 for (Channel successorChannel : consumer.getOutputChannels()) {
@@ -988,7 +995,12 @@ public class ChannelConversionGraph {
          *
          * @see TreeVertex#channelDescriptor
          */
-        private final Set<ChannelDescriptor> employedChannelDescriptors = new HashSet<>();
+        private final Set<ChannelDescriptor> employedChannelDescriptors = new LinkedHashSet<>();
+
+        /**
+         * Cached deterministic signature for tie-breaking.
+         */
+        private String deterministicSignature;
 
         /**
          * The sum of the costs of all {@link TreeEdge}s of this instance.
@@ -1010,6 +1022,7 @@ public class ChannelConversionGraph {
             this.root = root;
             this.settledDestinationIndices = settledDestinationIndices;
             this.employedChannelDescriptors.add(root.channelDescriptor);
+            this.deterministicSignature = null;
         }
 
         /**
@@ -1033,6 +1046,21 @@ public class ChannelConversionGraph {
             this.employedChannelDescriptors.add(newRootChannelDescriptor);
             this.settledDestinationIndices.orInPlace(newRootSettledIndices);
             this.costs += edge.costEstimate;
+            this.deterministicSignature = null;
+        }
+
+        private String getDeterministicSignature() {
+            if (this.deterministicSignature == null) {
+                final String descriptorSignature = this.employedChannelDescriptors.stream()
+                        .map(Object::toString)
+                        .sorted()
+                        .collect(Collectors.joining("|"));
+                final String indexSignature = StreamSupport.stream(this.settledDestinationIndices.spliterator(), false)
+                        .map(String::valueOf)
+                        .collect(Collectors.joining(","));
+                this.deterministicSignature = descriptorSignature + "#" + indexSignature;
+            }
+            return this.deterministicSignature;
         }
 
         @Override
@@ -1090,7 +1118,7 @@ public class ChannelConversionGraph {
          * @return a {@link Set} of said {@link ChannelConversion}s
          */
         private Set<ChannelConversion> getChildChannelConversions() {
-            Set<ChannelConversion> channelConversions = new HashSet<>();
+            Set<ChannelConversion> channelConversions = new LinkedHashSet<>();
             for (TreeEdge edge : this.outEdges) {
                 channelConversions.add(edge.channelConversion);
                 channelConversions.addAll(edge.destination.getChildChannelConversions());

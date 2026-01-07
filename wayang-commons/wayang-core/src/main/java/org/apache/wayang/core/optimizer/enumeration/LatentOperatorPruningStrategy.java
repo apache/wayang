@@ -85,7 +85,7 @@ public class LatentOperatorPruningStrategy implements PlanEnumerationPruningStra
                                                     PlanImplementation p2) {
         final double t1 = p1.getSquashedCostEstimate(true);
         final double t2 = p2.getSquashedCostEstimate(true);
-        final boolean isPickP1 = t1 <= t2;
+        final boolean isPickP1 = PlanImplementation.costComparator().compare(p1, p2) <= 0;
         if (logger.isDebugEnabled()) {
             if (isPickP1) {
                 LogManager.getLogger(LatentOperatorPruningStrategy.class).debug(

@@ -66,11 +66,7 @@ public class DefaultEstimatableCost implements EstimatableCost {
         Set<ExecutionStage> executedStages
     ) {
         final PlanImplementation bestPlanImplementation = executionPlans.stream()
-                .reduce((p1, p2) -> {
-                    final double t1 = p1.getSquashedCostEstimate();
-                    final double t2 = p2.getSquashedCostEstimate();
-                    return t1 < t2 ? p1 : p2;
-                })
+                .min(PlanImplementation.costComparator())
                 .orElseThrow(() -> new WayangException("Could not find an execution plan."));
         return bestPlanImplementation;
     }

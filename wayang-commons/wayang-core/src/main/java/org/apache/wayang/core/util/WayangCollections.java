@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -59,7 +59,7 @@ public class WayangCollections {
         if (collection instanceof Set<?>) {
             return (Set<T>) collection;
         }
-        return new HashSet<>(collection);
+        return new LinkedHashSet<>(collection);
     }
 
     /**
@@ -69,7 +69,7 @@ public class WayangCollections {
         if (iterable instanceof Set<?>) {
             return (Set<T>) iterable;
         }
-        Set<T> set = new HashSet<>();
+        Set<T> set = new LinkedHashSet<>();
         for (T t : iterable) {
             set.add(t);
         }
@@ -80,7 +80,7 @@ public class WayangCollections {
      * Provides the given {@code values} as {@link Set}.
      */
     public static <T> Set<T> asSet(T... values) {
-        Set<T> set = new HashSet<>(values.length);
+        Set<T> set = new LinkedHashSet<>(values.length);
         for (T value : values) {
             set.add(value);
         }

@@ -40,16 +40,8 @@ public class TopKPruningStrategy implements PlanEnumerationPruningStrategy {
         if (planEnumeration.getPlanImplementations().size() <= this.k) return;
 
         ArrayList<PlanImplementation> planImplementations = new ArrayList<>(planEnumeration.getPlanImplementations());
-        planImplementations.sort(this::comparePlanImplementations);
+        planImplementations.sort(PlanImplementation.costComparator());
         planEnumeration.getPlanImplementations().retainAll(planImplementations.subList(0, this.k));
-    }
-
-
-    private int comparePlanImplementations(PlanImplementation p1,
-                                           PlanImplementation p2) {
-        final double t1 = p1.getSquashedCostEstimate(true);
-        final double t2 = p2.getSquashedCostEstimate(true);
-        return Double.compare(t1, t2);
     }
 
 }
