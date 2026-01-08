@@ -73,7 +73,7 @@ public abstract class JdbcJoinOperator<KeyType>
         final String rightTableName = right.field0;
         final String rightKey = right.field1;
 
-        return "JOIN " + leftTableName + " ON " +
+        return "JOIN " + rightTableName + " ON " +
             rightTableName + "." + rightKey
             + "=" + leftTableName + "." + leftKey;
     }

@@ -119,7 +119,7 @@ class JdbcJoinOperatorTest extends OperatorTestBase {
         System.out.println();
 
         assertEquals(
-            "SELECT * FROM testA JOIN testA ON testB.a=testA.a;",
+            "SELECT * FROM testA JOIN testB ON testB.a=testA.a;",
             sqlQueryChannelInstance.getSqlQuery()
         );
     }
