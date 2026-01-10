@@ -16,8 +16,8 @@
   limitations under the License.
 
 -->
-# Using Machine Learning for query optimization in Apache Wayang (incubating)
-Apache Wayang (incubating) can be customized with concrete
+# Using Machine-Learning for query optimization in Apache Wayang 
+Apache Wayang can be customized with concrete
 implementations of the `EstimatableCost` interface in order to optimize
 for a desired metric.  The implementation can be enabled by providing it
 to a `Configuration`.
@@ -44,7 +44,7 @@ public class WordCount {
 
 In combination with an encoding scheme and a third party package to load
 ML models, the following example shows how to predict runtimes of query
-execution plans runtimes in Apache Wayang (incubating):
+execution plans runtimes in Apache Wayang:
 
 ```java
 import org.apache.wayang.core.optimizer.costs.EstimatableCost;

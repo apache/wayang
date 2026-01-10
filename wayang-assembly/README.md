@@ -18,7 +18,7 @@ under the License.
 --->
 
 # Wayang Assembly
-This is an assembly module for Apache Wayang(Incubator) project.
+This is an assembly module for Apache Wayang project.
 
 It creates a single tar.gz file that includes all needed dependency of the project
 except for the jars in the list

@@ -61,7 +61,7 @@ Apache Wayang aims at freeing data engineers and software developers from the bu
 - [Apache Kafka](https://kafka.apache.org)
 - [Tensorflow](https://www.tensorflow.org/)
 
-Apache Wayang (incubating) can be used via the following APIs:
+Apache Wayang can be used via the following APIs:
 - Java scala-like
 - Scala
 - SQL
@@ -116,7 +116,7 @@ source ~/.zshrc
 
 ### Requirements at Runtime
 
-Apache Wayang (incubating) relies on external execution engines and Java to function correctly. Below are the updated runtime requirements:
+Apache Wayang relies on external execution engines and Java to function correctly. Below are the updated runtime requirements:
 
 - **Java 17**: Make sure `JAVA_HOME` is correctly set to your Java 17 installation.
 - **Apache Spark 3.4.4**: Compatible with Scala 2.12. Set the `SPARK_HOME` environment variable.
@@ -185,7 +185,7 @@ In addition, you can obtain the most recent snapshot version of Wayang via Sonat
 ```
 
 ### Prerequisites
-Apache Wayang (incubating) is built with Java 17 and Scala 2.12. However, to run Apache Wayang it is sufficient to have just Java 17 installed. Please also consider that processing platforms employed by Wayang might have further requirements.
+Apache Wayang is built with Java 17 and Scala 2.12. However, to run Apache Wayang it is sufficient to have just Java 17 installed. Please also consider that processing platforms employed by Wayang might have further requirements.
 ```
 Java 17
 Scala 2.12.17
@@ -262,7 +262,7 @@ The list of [contributors](https://github.com/apache/incubator-wayang/graphs/con
 ## License
 All files in this repository are licensed under the Apache Software License 2.0
 
-Copyright 2020 - 2025 The Apache Software Foundation.
+Copyright 2020 - 2026 The Apache Software Foundation.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
