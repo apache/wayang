@@ -88,6 +88,64 @@ class JdbcExecutorTest {
     }
 
     @Test
+    void testExecuteWithMultipleConsumers() throws SQLException {
+        Configuration configuration = new Configuration();
+        Job job = mock(Job.class);
+        when(job.getConfiguration()).thenReturn(configuration);
+
+        CrossPlatformExecutor executionState =
+                new CrossPlatformExecutor(job, new NoInstrumentationStrategy());
+        when(job.getCrossPlatformExecutor()).thenReturn(executionState);
+
+        SqlQueryChannel.Descriptor descriptor =
+                HsqldbPlatform.getInstance().getSqlQueryChannelDescriptor();
+
+        ExecutionStage sqlStage = mock(ExecutionStage.class);
+        ExecutionStage nextStage = mock(ExecutionStage.class);
+
+        JdbcTableSource tableSource = new HsqldbTableSource("customer");
+        ExecutionTask tableSourceTask = new ExecutionTask(tableSource);
+        tableSourceTask.setStage(sqlStage);
+
+        SqlQueryChannel outputChannel =
+                new SqlQueryChannel(descriptor, tableSource.getOutput(0)) {
+                    @Override
+                    public boolean isReusable() {
+                        return true;
+                    }
+            };
+        tableSourceTask.setOutputChannel(0, outputChannel);
+
+        when(sqlStage.getStartTasks()).thenReturn(Collections.singleton(tableSourceTask));
+        when(sqlStage.getTerminalTasks()).thenReturn(Collections.singleton(tableSourceTask));
+        when(sqlStage.getAllTasks()).thenReturn(Collections.singleton(tableSourceTask));
+
+        for (int i = 0; i < 2; i++) {
+            ExecutionTask consumer =
+                    new ExecutionTask(new SqlToStreamOperator(HsqldbPlatform.getInstance()));
+            consumer.setStage(nextStage);
+            outputChannel.addConsumer(consumer, 0);
+        }
+
+        JdbcExecutor executor = new JdbcExecutor(HsqldbPlatform.getInstance(), job);
+
+        try {
+            executor.execute(
+                    sqlStage,
+                    new DefaultOptimizationContext(job),
+                    executionState
+            );
+
+            SqlQueryChannel.Instance result =
+                    (SqlQueryChannel.Instance) executionState.getChannelInstance(outputChannel);
+
+            assertEquals("SELECT * FROM customer", result.getSqlQuery());
+        } finally {
+            executor.dispose();
+        }
+    }
+
+    @Test
     void testExecuteWithFilter() throws SQLException {
         Configuration configuration = new Configuration();
         Job job = mock(Job.class);
