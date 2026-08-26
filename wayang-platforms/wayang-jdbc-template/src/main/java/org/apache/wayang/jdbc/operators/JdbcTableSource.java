@@ -55,9 +55,16 @@ public abstract class JdbcTableSource extends TableSource implements JdbcExecuti
 
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
-        return this.getTableName();
-    }
+        // Call the method we just created in the parent
+        String[] cols = this.getColumnNames();
 
+        if (cols == null || cols.length == 0) {
+            return String.format("SELECT * FROM %s", this.getTableName());
+        }
+
+        String columns = String.join(", ", cols);
+        return String.format("SELECT %s FROM %s", columns, this.getTableName());
+    }
 
     @Override
     public String getLoadProfileEstimatorConfigurationKey() {
