@@ -29,6 +29,7 @@ import org.apache.wayang.core.platform.Executor;
 import org.apache.wayang.flink.execution.FlinkExecutor;
 
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class DataStreamChannel extends Channel {
 
@@ -39,8 +40,7 @@ public class DataStreamChannel extends Channel {
 
         private DataStream<?> dataStream;
 
-        // TODO: this.size is currently always 0
-        private long size;
+        private AtomicLong counter;
 
         public Instance(final FlinkExecutor executor,
                 final OptimizationContext.OperatorContext producerOperatorContext,
@@ -49,7 +49,16 @@ public class DataStreamChannel extends Channel {
         }
 
         public void accept(final DataStream<?> dataStream) {
-            this.dataStream = dataStream;
+            if (this.isMarkedForInstrumentation()) {
+                final AtomicLong c = new AtomicLong(0L);
+                this.counter = c;
+                this.dataStream = dataStream.filter(element -> {
+                    c.incrementAndGet();
+                    return true;
+                });
+            } else {
+                this.dataStream = dataStream;
+            }
         }
 
         @SuppressWarnings("unchecked")
@@ -59,7 +68,10 @@ public class DataStreamChannel extends Channel {
 
         @Override
         public OptionalLong getMeasuredCardinality() {
-            return this.size == 0 ? super.getMeasuredCardinality() : OptionalLong.of(this.size);
+            if (this.counter != null) {
+                this.setMeasuredCardinality(this.counter.get());
+            }
+            return super.getMeasuredCardinality();
         }
 
         @Override
@@ -69,6 +81,10 @@ public class DataStreamChannel extends Channel {
 
         @Override
         protected void doDispose() {
+            if (this.counter != null) {
+                this.setMeasuredCardinality(this.counter.get());
+                this.counter = null;
+            }
             this.dataStream = null;
         }
     }
