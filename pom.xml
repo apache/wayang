@@ -1308,6 +1308,7 @@
         <module>wayang-commons</module>
         <module>wayang-platforms</module>
         <module>wayang-api</module>
+        <module>wayang-jdbc</module>
         <module>wayang-profiler</module>
         <module>wayang-plugins</module>
         <module>wayang-resources</module>
