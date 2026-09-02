@@ -44,6 +44,7 @@ import com.google.protobuf.ByteString
 import org.apache.wayang.api.python.function._
 import org.tensorflow.ndarray.NdArray
 
+import scala.collection.JavaConverters._
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
 import scala.reflect._
@@ -632,6 +633,38 @@ class DataQuanta[Out: ClassTag](val operator: ElementaryOperator, outputIndex: I
     that.connectTo(joinOperator, 1)
     joinOperator
   }
+
+  def semanticFilterPrompt(prompt: String): DataQuanta[Out] = {
+    val dataSetType = org.apache.wayang.core.types.DataSetType.createDefault(
+      this.output.getType.getDataUnitType.toBasicDataUnitType
+    )
+
+    val filterOperator = new SemanticFilterOperator[Out](
+      dataSetType,
+      prompt
+    )
+
+    this.connectTo(filterOperator, 0)
+    wrap[Out](filterOperator)
+  }
+
+  def semanticFilterPrompt(prompt: String, targetModels: AnyRef * ): DataQuanta[Out] = {
+      val dataSetType = org.apache.wayang.core.types.DataSetType.createDefault(
+        this.output.getType.getDataUnitType.toBasicDataUnitType
+      )
+
+      val targetModelsSet: java.util.Set[Object] = targetModels.toSet.asJava.asInstanceOf[java.util.Set[Object]]
+      
+      val filterOperator = new SemanticFilterOperator[Out](
+        dataSetType,
+        prompt,
+        targetModelsSet
+      )
+
+      this.connectTo(filterOperator, 0)
+      wrap[Out](filterOperator)
+  }
+
 
   /**
     * Applies a spatial filter to this instance.
