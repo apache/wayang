@@ -13,33 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM eclipse-temurin:17-jre AS wayang-assembler
+FROM eclipse-temurin:17-jdk
 
-ARG WAYANG_DIST=wayang-assembly/target/*-dist.tar.gz
+WORKDIR /workspace/wayang
 
-COPY ${WAYANG_DIST} /tmp/wayang-dist.tar.gz
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git bash \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/wayang-root /opt/wayang /opt/wayang/smoke \
-    && tar -xzf /tmp/wayang-dist.tar.gz -C /opt/wayang-root \
-    && extracted_dir="$(find /opt/wayang-root -mindepth 1 -maxdepth 1 -type d -name 'wayang-*' | head -n 1)" \
-    && test -n "${extracted_dir}" \
-    && cp -a "${extracted_dir}/." /opt/wayang/ \
-    && find /opt/wayang -type f \( -name "*-sources.jar" -o -name "*-javadoc.jar" -o -name "README.md" \) -delete \
-    && printf "apache wayang docker smoke test\n" > /opt/wayang/smoke/wordcount.txt \
-    && rm /tmp/wayang-dist.tar.gz
+COPY . /workspace/wayang
 
-FROM eclipse-temurin:17-jre
+RUN sed -i 's/\r$//' mvnw \
+    && chmod +x mvnw
 
-ENV WAYANG_HOME=/opt/wayang
-ENV FLAG_WAYANG=true
-ENV PATH="${WAYANG_HOME}/bin:${PATH}"
+COPY docker/entrypoint.sh /usr/local/bin/wayang-entrypoint
 
-COPY --from=wayang-assembler /opt/wayang /opt/wayang
+RUN chmod +x /usr/local/bin/wayang-entrypoint
 
-RUN mkdir -p /root/.wayang /opt/wayang/conf \
-    && touch /opt/wayang/conf/wayang.properties
-
-WORKDIR /opt/wayang
-
-ENTRYPOINT ["/opt/wayang/bin/wayang-submit"]
-CMD ["org.apache.wayang.apps.pi.PiEstimation", "java", "1"]
+ENTRYPOINT ["wayang-entrypoint"]
+CMD ["bash"]
