@@ -18,21 +18,20 @@
 
 package org.apache.wayang.semantic.plugin;
 
-import org.apache.wayang.core.plugin.Plugin;
-import org.apache.wayang.basic.operators.SemanticFilterOperator;
-import org.apache.wayang.core.api.Configuration;
-import org.apache.wayang.core.mapping.Mapping;
-import org.apache.wayang.core.optimizer.channels.ChannelConversion;
-import org.apache.wayang.core.platform.Platform;
-import org.apache.wayang.semantic.mappings.JavaFilterMapping;
-import org.apache.wayang.semantic.udf.SemanticAlgorithm;
-import org.apache.wayang.java.Java;
-import org.apache.wayang.java.platform.JavaPlatform;
-
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+
+import org.apache.wayang.core.api.Configuration;
+import org.apache.wayang.core.mapping.Mapping;
+import org.apache.wayang.core.mapping.PlanTransformation;
+import org.apache.wayang.core.optimizer.channels.ChannelConversion;
+import org.apache.wayang.core.platform.Platform;
+import org.apache.wayang.core.plugin.Plugin;
+import org.apache.wayang.java.Java;
+import org.apache.wayang.java.platform.JavaPlatform;
 
 public class SemanticPlugin implements Plugin {
     private final List<Mapping> mappings;
@@ -52,8 +51,15 @@ public class SemanticPlugin implements Plugin {
 
     @Override
     public Collection<Platform> getRequiredPlatforms() {
-        // TODO: maybe we should find another way to handle this? but do Java for now.
-        return Collections.singleton(JavaPlatform.getInstance());
+        final Set<Platform> platforms = new LinkedHashSet<>();
+        // The surrounding pipeline (sources, sinks, plain transformations) always runs on Java.
+        platforms.add(JavaPlatform.getInstance());
+        for (final Mapping mapping : this.mappings) {
+            for (final PlanTransformation transformation : mapping.getTransformations()) {
+                platforms.addAll(transformation.getTargetPlatforms());
+            }
+        }
+        return platforms;
     }
 
     @Override
@@ -65,13 +71,14 @@ public class SemanticPlugin implements Plugin {
     public void setProperties(final Configuration configuration) {
     }
 
-    public SemanticPlugin withOperatorMapping(final Class<?> operatorClass, final SemanticAlgorithm<?, ?> model) {
+    /**
+     * Registers a {@link Mapping} that rewrites a semantic operator (e.g. a
+     * {@link org.apache.wayang.basic.operators.SemanticFilterOperator}) into a physical operator for one
+     * specific model implementation.
+     */
+    public SemanticPlugin withMapping(final Mapping mapping) {
         final List<Mapping> nextMappings = new ArrayList<>(this.mappings);
-
-        if (operatorClass.equals(SemanticFilterOperator.class)) {
-            nextMappings.add(new JavaFilterMapping((SemanticAlgorithm<Object, Boolean>) model));
-        }
-
+        nextMappings.add(mapping);
         return new SemanticPlugin(nextMappings);
     }
 }

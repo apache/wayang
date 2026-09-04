@@ -23,11 +23,12 @@ import java.util.Set;
 import org.apache.wayang.core.plan.wayangplan.UnaryToUnaryOperator;
 import org.apache.wayang.core.types.DataSetType;
 
-public class SemanticFilterOperator<T> extends UnaryToUnaryOperator<T, T> {
-    private final String prompt; 
+public class SemanticFilterOperator<T> extends UnaryToUnaryOperator<T, T> implements SemanticOperator {
 
-    public final Set<Object> targetModels;
-    
+    private final String prompt;
+
+    private final Set<Object> targetModels;
+
     public SemanticFilterOperator(final DataSetType<T> type, final String prompt) {
         super(type, type, false);
         this.prompt = prompt;
@@ -59,10 +60,17 @@ public class SemanticFilterOperator<T> extends UnaryToUnaryOperator<T, T> {
         this.targetModels = null;
     }
 
+    @Override
     public String getPrompt() {
         return prompt;
     }
 
+    @Override
+    public Set<Object> getTargetModels() {
+        return targetModels;
+    }
+
+    @Override
     public void addTargetModel(final Object model) {
         targetModels.add(model);
     }

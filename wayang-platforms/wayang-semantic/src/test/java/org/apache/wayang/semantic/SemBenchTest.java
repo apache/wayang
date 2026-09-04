@@ -18,33 +18,6 @@
 
 package org.apache.wayang.semantic;
 
-import org.apache.wayang.core.api.Configuration;
-import org.apache.wayang.core.api.WayangContext;
-import org.apache.wayang.core.function.ExecutionContext;
-import org.apache.wayang.core.function.FunctionDescriptor;
-import org.apache.wayang.core.function.TransformationDescriptor;
-import org.apache.wayang.core.function.FunctionDescriptor.SerializablePredicate;
-import org.apache.wayang.core.optimizer.costs.EstimationContext;
-import org.apache.wayang.core.optimizer.costs.LoadProfile;
-import org.apache.wayang.core.optimizer.costs.LoadProfileEstimator;
-import org.apache.wayang.core.optimizer.costs.LoadProfileEstimators;
-import org.apache.wayang.core.plan.wayangplan.WayangPlan;
-import org.apache.wayang.core.types.DataSetType;
-import org.apache.wayang.core.util.WayangArrays;
-import org.apache.wayang.core.util.WayangCollections;
-import org.apache.wayang.java.Java;
-import org.apache.wayang.java.operators.JavaCollectionSource;
-import org.apache.wayang.java.operators.JavaDoWhileOperator;
-import org.apache.wayang.java.operators.JavaLocalCallbackSink;
-import org.apache.wayang.semantic.plugin.SemanticPlugin;
-import org.apache.wayang.semantic.Semantic;
-import org.apache.wayang.semantic.udf.SemanticAlgorithm;
-import org.apache.wayang.semantic.operators.*;
-import org.apache.wayang.api.JavaPlanBuilder;
-import org.apache.wayang.basic.operators.SemanticFilterOperator;
-import org.apache.wayang.java.operators.JavaMapOperator;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -52,12 +25,34 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedList;
+import java.util.List;
+import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.apache.wayang.api.JavaPlanBuilder;
+import org.apache.wayang.basic.operators.SemanticFilterOperator;
+import org.apache.wayang.core.api.Configuration;
+import org.apache.wayang.core.api.WayangContext;
+import org.apache.wayang.core.mapping.Mapping;
+import org.apache.wayang.core.mapping.OperatorPattern;
+import org.apache.wayang.core.mapping.PlanTransformation;
+import org.apache.wayang.core.mapping.ReplacementSubplanFactory;
+import org.apache.wayang.core.mapping.SubplanPattern;
+import org.apache.wayang.core.optimizer.OptimizationContext;
+import org.apache.wayang.core.plan.wayangplan.ExecutionOperator;
+import org.apache.wayang.core.platform.ChannelInstance;
+import org.apache.wayang.core.platform.lineage.ExecutionLineageNode;
+import org.apache.wayang.core.types.DataSetType;
+import org.apache.wayang.core.util.Tuple;
+import org.apache.wayang.java.Java;
+import org.apache.wayang.java.channels.JavaChannelInstance;
+import org.apache.wayang.java.channels.StreamChannel;
+import org.apache.wayang.semantic.execution.OllamaExecutor;
+import org.apache.wayang.semantic.operators.OllamaFilterOperator;
+import org.apache.wayang.semantic.platform.OllamaPlatform;
+import org.apache.wayang.semantic.plugin.SemanticPlugin;
+import org.junit.jupiter.api.Test;
 
 class SemBenchTest {
     private static List<Review> loadReviews() {
@@ -68,13 +63,12 @@ class SemBenchTest {
                 new Review("taken_4", "It was okay. Not great, not terrible."));
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Test
     void testSemBenchMoviesWithOllama() {
         final Configuration configuration = new Configuration();
         configuration.setProperty("wayang.java.filter.load", """
             {
-            "in":1, 
+            "in":1,
             "out":1,
             "cpu":"${25*in0 + 350000}",
             "ram":"100000",
@@ -126,54 +120,15 @@ class SemBenchTest {
             """
         );
 
-        final SemanticAlgorithm ollamaFilter = new SemanticAlgorithm();
-        ollamaFilter.impl = (input, prompt) -> {
-            try {
-                return OllamaSemanticFilter.isPositiveSentiment((Review) input);
-            } catch (IOException | InterruptedException e) {
-                throw new RuntimeException("Ollama call failed", e);
-            }
-        };
-        ollamaFilter.loadProfileEstimator =
-            LoadProfileEstimators.createFromSpecification(
-                    "wayang.semantic.ollama.model1.load",
-                    configuration
-            );
-
-        final SemanticAlgorithm ollamaFilter2 = new SemanticAlgorithm();
-        ollamaFilter2.impl = (input, prompt) -> {
-            try {
-                return OllamaSemanticFilter.isPositiveSentiment2((Review) input);
-            } catch (IOException | InterruptedException e) {
-                throw new RuntimeException("Ollama call failed", e);
-            }
-        };
-        ollamaFilter2.loadProfileEstimator =
-            LoadProfileEstimators.createFromSpecification(
-                    "wayang.semantic.ollama.model2.load",
-                    configuration
-            );
-
-        final SemanticAlgorithm ollamaFilter3 = new SemanticAlgorithm();
-        ollamaFilter3.impl = (input, prompt) -> {
-            try {
-                return OllamaSemanticFilter.isPositiveSentiment3((Review) input, (String) prompt);
-            } catch (IOException | InterruptedException e) {
-                throw new RuntimeException("Ollama call failed", e);
-            }
-        };
-        ollamaFilter3.loadProfileEstimator =
-            LoadProfileEstimators.createFromSpecification(
-                    "wayang.semantic.ollama.model3.load",
-                    configuration
-            );
-
+        // Each Ollama model is its own physical operator + Mapping; the optimizer picks among them by cost.
+        // There is exactly one prompt, owned by the logical SemanticFilterOperator (set via .semanticFilter(...)),
+        // and each physical operator decides for itself whether it needs that prompt.
         final SemanticPlugin plugin = Semantic.plugin()
-                .withOperatorMapping(SemanticFilterOperator.class, ollamaFilter)
-                .withOperatorMapping(SemanticFilterOperator.class, ollamaFilter2)
-                .withOperatorMapping(SemanticFilterOperator.class, ollamaFilter3);
+                .withMapping(new OllamaModel1FilterMapping())
+                .withMapping(new OllamaModel2FilterMapping())
+                .withMapping(new OllamaModel3FilterMapping());
 
-        final WayangContext wayangContext = new WayangContext()
+        final WayangContext wayangContext = new WayangContext(configuration)
                 .withPlugin(Java.basicPlugin())
                 .withPlugin(plugin);
         final JavaPlanBuilder planBuilder = new JavaPlanBuilder(wayangContext);
@@ -181,7 +136,7 @@ class SemBenchTest {
         final Collection<Long> positiveReviewCnt = planBuilder.loadCollection(loadReviews())
                 .filter(review -> "taken_3".equals(review.getId()))
                 .semanticFilter("Analyze the review after the | and write either \"POSITIVE\" if the review has a positive sentiment and \"NEGATIVE\" if the review has a negative sentiment.")
-                    .withTargetModels(ollamaFilter, ollamaFilter2, ollamaFilter3)
+                    .withTargetModels(OllamaModel1FilterOperator.class, OllamaModel2FilterOperator.class, OllamaModel3FilterOperator.class)
                 .count()
                 .collect();
     }
@@ -207,6 +162,197 @@ class Review {
     @Override
     public String toString() {
         return "Review{id='" + id + "', reviewText='" + reviewText + "'}";
+    }
+}
+
+/**
+ * Physical operator for the "model1" Ollama implementation: a fixed sentiment prompt, ignores the
+ * logical operator's {@link #getPrompt()}.
+ */
+final class OllamaModel1FilterOperator<Type> extends OllamaFilterOperator<Type> {
+
+    OllamaModel1FilterOperator(final DataSetType<Type> type, final String prompt) {
+        super(type, prompt);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Tuple<Collection<ExecutionLineageNode>, Collection<ChannelInstance>> evaluate(
+            final ChannelInstance[] inputs,
+            final ChannelInstance[] outputs,
+            final OllamaExecutor ollamaExecutor,
+            final OptimizationContext.OperatorContext operatorContext) {
+        assert inputs.length == this.getNumInputs();
+        assert outputs.length == this.getNumOutputs();
+
+        final Stream<Review> filtered = ((JavaChannelInstance) inputs[0]).<Review>provideStream().filter(review -> {
+            try {
+                return OllamaSemanticFilter.isPositiveSentiment(review);
+            } catch (IOException | InterruptedException e) {
+                throw new RuntimeException("Ollama call failed", e);
+            }
+        });
+        ((StreamChannel.Instance) outputs[0]).accept(filtered);
+
+        return ExecutionOperator.modelLazyExecution(inputs, outputs, operatorContext);
+    }
+
+    @Override
+    public String getLoadProfileEstimatorConfigurationKey() {
+        return "wayang.semantic.ollama.model1.load";
+    }
+
+    @Override
+    protected OllamaFilterOperator<Type> newInstance(final DataSetType<Type> type, final String prompt) {
+        return new OllamaModel1FilterOperator<>(type, prompt);
+    }
+}
+
+/**
+ * Physical operator for the "model2" Ollama implementation: a different fixed sentiment prompt, also
+ * ignores the logical operator's {@link #getPrompt()}.
+ */
+final class OllamaModel2FilterOperator<Type> extends OllamaFilterOperator<Type> {
+
+    OllamaModel2FilterOperator(final DataSetType<Type> type, final String prompt) {
+        super(type, prompt);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Tuple<Collection<ExecutionLineageNode>, Collection<ChannelInstance>> evaluate(
+            final ChannelInstance[] inputs,
+            final ChannelInstance[] outputs,
+            final OllamaExecutor ollamaExecutor,
+            final OptimizationContext.OperatorContext operatorContext) {
+        assert inputs.length == this.getNumInputs();
+        assert outputs.length == this.getNumOutputs();
+
+        final Stream<Review> filtered = ((JavaChannelInstance) inputs[0]).<Review>provideStream().filter(review -> {
+            try {
+                return OllamaSemanticFilter.isPositiveSentiment2(review);
+            } catch (IOException | InterruptedException e) {
+                throw new RuntimeException("Ollama call failed", e);
+            }
+        });
+        ((StreamChannel.Instance) outputs[0]).accept(filtered);
+
+        return ExecutionOperator.modelLazyExecution(inputs, outputs, operatorContext);
+    }
+
+    @Override
+    public String getLoadProfileEstimatorConfigurationKey() {
+        return "wayang.semantic.ollama.model2.load";
+    }
+
+    @Override
+    protected OllamaFilterOperator<Type> newInstance(final DataSetType<Type> type, final String prompt) {
+        return new OllamaModel2FilterOperator<>(type, prompt);
+    }
+}
+
+/**
+ * Physical operator for the "model3" Ollama implementation: the only one that actually uses the
+ * logical operator's {@link #getPrompt()}.
+ */
+final class OllamaModel3FilterOperator<Type> extends OllamaFilterOperator<Type> {
+
+    OllamaModel3FilterOperator(final DataSetType<Type> type, final String prompt) {
+        super(type, prompt);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Tuple<Collection<ExecutionLineageNode>, Collection<ChannelInstance>> evaluate(
+            final ChannelInstance[] inputs,
+            final ChannelInstance[] outputs,
+            final OllamaExecutor ollamaExecutor,
+            final OptimizationContext.OperatorContext operatorContext) {
+        assert inputs.length == this.getNumInputs();
+        assert outputs.length == this.getNumOutputs();
+
+        final Stream<Review> filtered = ((JavaChannelInstance) inputs[0]).<Review>provideStream().filter(review -> {
+            try {
+                return OllamaSemanticFilter.isPositiveSentiment3(review, this.getPrompt());
+            } catch (IOException | InterruptedException e) {
+                throw new RuntimeException("Ollama call failed", e);
+            }
+        });
+        ((StreamChannel.Instance) outputs[0]).accept(filtered);
+
+        return ExecutionOperator.modelLazyExecution(inputs, outputs, operatorContext);
+    }
+
+    @Override
+    public String getLoadProfileEstimatorConfigurationKey() {
+        return "wayang.semantic.ollama.model3.load";
+    }
+
+    @Override
+    protected OllamaFilterOperator<Type> newInstance(final DataSetType<Type> type, final String prompt) {
+        return new OllamaModel3FilterOperator<>(type, prompt);
+    }
+}
+
+abstract class AbstractOllamaFilterMapping implements Mapping {
+
+    private final Class<? extends OllamaFilterOperator> targetOperatorClass;
+
+    AbstractOllamaFilterMapping(final Class<? extends OllamaFilterOperator> targetOperatorClass) {
+        this.targetOperatorClass = targetOperatorClass;
+    }
+
+    @Override
+    public Collection<PlanTransformation> getTransformations() {
+        return Collections.singleton(new PlanTransformation(this.createSubplanPattern(),
+                this.createReplacementSubplanFactory(), OllamaPlatform.getInstance()));
+    }
+
+    private SubplanPattern createSubplanPattern() {
+        return SubplanPattern.createSingleton(new OperatorPattern<SemanticFilterOperator<?>>("semantic_filter",
+                new SemanticFilterOperator<>(DataSetType.NONE), false)
+                        .withAdditionalTest(op -> op.getTargetModels() != null)
+                        .withAdditionalTest(op -> op.getTargetModels().contains(this.targetOperatorClass)));
+    }
+
+    protected abstract <I> OllamaFilterOperator<I> createOperator(DataSetType<I> type, String prompt);
+
+    private <I> ReplacementSubplanFactory createReplacementSubplanFactory() {
+        return new ReplacementSubplanFactory.OfSingleOperators<SemanticFilterOperator<I>>((matchedOperator, epoch) ->
+                this.<I>createOperator(matchedOperator.getInputType(), matchedOperator.getPrompt()).at(epoch));
+    }
+}
+
+final class OllamaModel1FilterMapping extends AbstractOllamaFilterMapping {
+    OllamaModel1FilterMapping() {
+        super(OllamaModel1FilterOperator.class);
+    }
+
+    @Override
+    protected <I> OllamaFilterOperator<I> createOperator(final DataSetType<I> type, final String prompt) {
+        return new OllamaModel1FilterOperator<>(type, prompt);
+    }
+}
+
+final class OllamaModel2FilterMapping extends AbstractOllamaFilterMapping {
+    OllamaModel2FilterMapping() {
+        super(OllamaModel2FilterOperator.class);
+    }
+
+    @Override
+    protected <I> OllamaFilterOperator<I> createOperator(final DataSetType<I> type, final String prompt) {
+        return new OllamaModel2FilterOperator<>(type, prompt);
+    }
+}
+
+final class OllamaModel3FilterMapping extends AbstractOllamaFilterMapping {
+    OllamaModel3FilterMapping() {
+        super(OllamaModel3FilterOperator.class);
+    }
+
+    @Override
+    protected <I> OllamaFilterOperator<I> createOperator(final DataSetType<I> type, final String prompt) {
+        return new OllamaModel3FilterOperator<>(type, prompt);
     }
 }
 
