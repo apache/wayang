@@ -26,4 +26,4 @@ next:
 
 # Code Changes
 
-Apache Wayang (incubating) is an open source system, and we try to everyone can contribute on it, so feel free to contribute but please read our process to make your life easy 😉. If you have any doubt please write on our [email list@dev](mailto:dev@wayang.apache.org).
+Apache Wayang is an open source system, and we try to everyone can contribute on it, so feel free to contribute but please read our process to make your life easy 😉. If you have any doubt please write on our [email list@dev](mailto:dev@wayang.apache.org).
