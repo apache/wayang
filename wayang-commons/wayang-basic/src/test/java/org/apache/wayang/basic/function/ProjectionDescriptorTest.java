@@ -25,7 +25,14 @@ import org.junit.jupiter.api.Test;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
 /**
  * Tests for the {@link ProjectionDescriptor}.
@@ -45,11 +52,60 @@ class ProjectionDescriptorTest {
                 stringImplementation.apply(new Pojo("testValue", 1))
         );
         assertNull(stringImplementation.apply(new Pojo(null, 1)));
+        assertNull(stringImplementation.apply(null));
         assertEquals(
                 Integer.valueOf(1),
                 integerImplementation.apply(new Pojo("testValue", 1))
         );
+    }
 
+    @Test
+    void testPojoImplementationMultipleFieldsThrows() {
+        final ProjectionDescriptor<Pojo, String> multiFieldDescriptor =
+                new ProjectionDescriptor<>(Pojo.class, String.class, "string", "integer");
+        final Function<Pojo, String> multiFieldImplementation = multiFieldDescriptor.getJavaImplementation();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> multiFieldImplementation.apply(new Pojo("testValue", 1))
+        );
+    }
+
+    @Test
+    void testPojoImplementationNonExistentFieldThrows() {
+        final ProjectionDescriptor<Pojo, String> invalidDescriptor =
+                new ProjectionDescriptor<>(Pojo.class, String.class, "nonExistentField");
+        final Function<Pojo, String> invalidImplementation = invalidDescriptor.getJavaImplementation();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> invalidImplementation.apply(new Pojo("testValue", 1))
+        );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testPojoImplementationSerialization() throws Exception {
+        final ProjectionDescriptor<Pojo, String> stringDescriptor =
+                new ProjectionDescriptor<>(Pojo.class, String.class, "string");
+        Function<Pojo, String> fn = stringDescriptor.getJavaImplementation();
+
+        // Use the function once so that 'field' is populated
+        assertEquals("val1", fn.apply(new Pojo("val1", 42)));
+
+        // Serialize and deserialize
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(fn);
+        }
+
+        Function<Pojo, String> deserializedFn;
+        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
+            deserializedFn = (Function<Pojo, String>) ois.readObject();
+        }
+
+        assertNotNull(deserializedFn);
+        assertEquals("val2", deserializedFn.apply(new Pojo("val2", 99)));
     }
 
     @Test
@@ -65,7 +121,7 @@ class ProjectionDescriptorTest {
         );
     }
 
-    public static class Pojo {
+    public static class Pojo implements java.io.Serializable {
 
         public String string;
 

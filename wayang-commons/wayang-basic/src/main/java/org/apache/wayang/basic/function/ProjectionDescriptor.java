@@ -45,7 +45,7 @@ public class ProjectionDescriptor<Input, Output> extends TransformationDescripto
 
         private final String fieldName;
 
-        private Field field;
+        private transient Field field;
 
         private PojoImplementation(final String fieldName) {
             this.fieldName = fieldName;
@@ -54,6 +54,10 @@ public class ProjectionDescriptor<Input, Output> extends TransformationDescripto
         @Override
         @SuppressWarnings("unchecked")
         public Output apply(final Input input) {
+            if (input == null) {
+                return null;
+            }
+
             // Initialization code.
             if (this.field == null) {
 
@@ -127,7 +131,7 @@ public class ProjectionDescriptor<Input, Output> extends TransformationDescripto
     }
 
     private static <Input, Output> FunctionDescriptor.SerializableFunction<Input, Output> createPojoJavaImplementation(
-            final String[] fieldNames, final BasicDataUnitType<Input> inputType) {
+            final String[] fieldNames) {
         // Get the names of the fields to be projected.
         if (fieldNames.length != 1) {
             return t -> {
@@ -185,7 +189,7 @@ public class ProjectionDescriptor<Input, Output> extends TransformationDescripto
      */
     public ProjectionDescriptor(final BasicDataUnitType<Input> inputType, final BasicDataUnitType<Output> outputType,
             final String... fieldNames) {
-        this(createPojoJavaImplementation(fieldNames, inputType),
+        this(createPojoJavaImplementation(fieldNames),
                 Collections.unmodifiableList(Arrays.asList(fieldNames)),
                 inputType,
                 outputType);
