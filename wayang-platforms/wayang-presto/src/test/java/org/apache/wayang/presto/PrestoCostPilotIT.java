@@ -71,7 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PrestoCostPilotIT {
 
     private static final String HOST = System.getenv().getOrDefault("PRESTO_HOST", "localhost");
-    private static final int PORT = Integer.parseInt(System.getenv().getOrDefault("PRESTO_PORT", "8081"));
+    private static final int PORT = Integer.parseInt(System.getenv().getOrDefault("PRESTO_PORT", "8080"));
     private static final String USER = System.getenv().getOrDefault("PRESTO_USER", "test");
     private static final String JDBC_URL = String.format("jdbc:presto://%s:%d/memory", HOST, PORT);
 

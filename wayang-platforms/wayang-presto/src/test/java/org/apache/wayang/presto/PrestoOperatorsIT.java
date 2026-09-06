@@ -85,8 +85,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code CREATE TABLE ... AS SELECT} ran entirely inside Presto.
  *
  * <p>Prerequisites: a Presto reachable at {@code PRESTO_HOST:PRESTO_PORT}
- * (defaults {@code localhost:8081}) with the {@code memory} connector enabled —
- * e.g. {@code cd presto-setup && docker compose up -d}. If Presto is not reachable
+ * (defaults {@code localhost:8080}) with the {@code memory} connector enabled.
+ * If Presto is not reachable
  * the whole class is skipped (not failed).
  *
  * <pre>
@@ -99,7 +99,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PrestoOperatorsIT {
 
     private static final String HOST = System.getenv().getOrDefault("PRESTO_HOST", "localhost");
-    private static final int    PORT = Integer.parseInt(System.getenv().getOrDefault("PRESTO_PORT", "8081"));
+    private static final int    PORT = Integer.parseInt(System.getenv().getOrDefault("PRESTO_PORT", "8080"));
     private static final String USER = System.getenv().getOrDefault("PRESTO_USER", "test");
     private static final String JDBC_URL = String.format("jdbc:presto://%s:%d/memory", HOST, PORT);
 

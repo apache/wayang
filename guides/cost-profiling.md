@@ -257,7 +257,7 @@ model should predict:
 - If Wayang should predict user-visible runtime, fit wall-clock elapsed time.
 - If the platform reports CPU time and the model uses CPU load, make sure the
   conversion to Wayang cost is consistent with the resource model.
-- Parameters learned on a local Docker setup should be treated as local
+- Parameters learned on one deployment should be treated as environment-specific
   reference values, not universal defaults for every deployment.
 
 ## 6. Running a Profiling Experiment
@@ -265,11 +265,11 @@ model should predict:
 The exact command depends on the platform module, test class, and property
 prefix.
 
-| Platform | Setup guide | Maven module | Test class | Property prefix | Default output directory |
+| Platform | Platform guide | Maven module | Test class | Property prefix | Default output directory |
 |----------|-------------|--------------|------------|-----------------|--------------------------|
-| Trino | `trino-setup/README.md` | `wayang-platforms/wayang-trino` | `TrinoCostPilotIT` | `trino.profile.*` | `target/cost-profiling/trino` |
-| Presto | `presto-setup/README.md` | `wayang-platforms/wayang-presto` | `PrestoCostPilotIT` | `presto.profile.*` | `target/cost-profiling/presto` |
-| BigQuery | `bigquery-setup/README.md` | `wayang-platforms/wayang-bigquery` | `BigQueryCostPilotIT` | `bigquery.profile.*` | `target/cost-profiling/bigquery` |
+| Trino | `wayang-platforms/wayang-trino/README.md` | `wayang-platforms/wayang-trino` | `TrinoCostPilotIT` | `trino.profile.*` | `target/cost-profiling/trino` |
+| Presto | `wayang-platforms/wayang-presto/README.md` | `wayang-platforms/wayang-presto` | `PrestoCostPilotIT` | `presto.profile.*` | `target/cost-profiling/presto` |
+| BigQuery | `wayang-platforms/wayang-bigquery/README.md` | `wayang-platforms/wayang-bigquery` | `BigQueryCostPilotIT` | `bigquery.profile.*` | `target/cost-profiling/bigquery` |
 
 The commands below use PowerShell. On macOS/Linux, use `./mvnw` instead of
 `.\mvnw.cmd` and replace PowerShell backticks with Bash line-continuation

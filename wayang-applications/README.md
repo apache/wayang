@@ -76,4 +76,8 @@ The file _env.demo1.sh_ contains additional properties, need in a particlar demo
 In this file we will never see cluster or user specific details, only properties which are specific to the 
 particular application are listed here.
 
+## SQL Platform Examples
 
+- [BigQuery](bigquery.md)
+- [Presto](presto.md)
+- [Trino](trino.md)

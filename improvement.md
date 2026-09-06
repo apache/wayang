@@ -106,13 +106,10 @@ The high-level tests also rely on the `withSqlUdf` / `withSqlUdfs` additions to
 sort builders can carry SQL implementations.
 
 ```bash
-docker compose -f presto-setup/docker-compose.yml up -d
-
+PRESTO_HOST=presto.example.com PRESTO_PORT=8080 PRESTO_USER=wayang \
 JAVA_HOME=<jdk17> mvn test -pl wayang-platforms/wayang-presto -am \
   -Dtest=PrestoOperatorsIT -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false \
   -Drat.skip=true -Dlicense.skip=true -Pskip-prerequisite-check
-
-docker compose -f presto-setup/docker-compose.yml down
 ```
 
 Expected: `Tests run: 13, Failures: 0, Errors: 0, Skipped: 0`. The suite scales

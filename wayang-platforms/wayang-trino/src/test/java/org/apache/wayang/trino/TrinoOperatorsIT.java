@@ -80,8 +80,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * execution itself does not require the Java plugin. Result assertions use
  * plain JDBC only after the Wayang execution has completed.
  *
- * <p>Prerequisites: a Trino reachable at {@code TRINO_HOST:TRINO_PORT}
- * (defaults {@code localhost:8080}); e.g. {@code cd platforms-setup-guides/trino-setup && docker compose up -d}.
+ * <p>Prerequisites: a user-managed Trino reachable at
+ * {@code TRINO_HOST:TRINO_PORT} (defaults {@code localhost:8080}).
  * If Trino is not reachable the whole class is skipped (not failed).
  *
  * <p>Run:

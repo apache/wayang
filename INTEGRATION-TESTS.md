@@ -54,29 +54,23 @@ local runs; skip them:
 
 ## Presto
 
-The test is self-contained: it creates and seeds its own `memory.wayang_it`
-tables in Presto's built-in **in-memory connector** (scaled to 120k rows so the
-optimizer elects SQL pushdown) and drops them afterwards — no Hive metastore or
-object storage required.
+The test creates and seeds its own `memory.wayang_it` tables in a user-managed
+Presto deployment with the memory connector enabled. It drops the fixtures
+afterward.
 
 ```bash
-# 1. start a single PrestoDB node with the in-memory connector
-cd presto-setup && docker compose up -d --wait && cd ..
-
-# 2. run the operator tests (JDK 17)
+# Run the operator tests against the configured deployment (JDK 17)
+PRESTO_HOST=presto.example.com PRESTO_PORT=8080 PRESTO_USER=wayang \
 JAVA_HOME=/path/to/jdk-17 \
 mvn -o test -pl wayang-platforms/wayang-presto \
-  -Dtest=AllOperatorsIT -Dsurefire.failIfNoSpecifiedTests=false \
+  -Dtest=PrestoOperatorsIT -Dsurefire.failIfNoSpecifiedTests=false \
   -Drat.skip=true -Dlicense.skip=true -Dmaven.javadoc.skip=true -Pskip-prerequisite-check
-
-# 3. tear down when done
-cd presto-setup && docker compose down -v && cd ..
 ```
 
 Expected: `Tests run: 4, Failures: 0, Errors: 0, Skipped: 0`.
 
-`docker compose up -d --wait` blocks on the container healthcheck, so Presto is
-query-ready when it returns. Presto listens on host port **8081** (container 8080).
+Connection settings are supplied through `PRESTO_HOST`, `PRESTO_PORT`, and
+`PRESTO_USER`.
 
 ---
 
