@@ -357,7 +357,7 @@ final class OllamaModel3FilterMapping extends AbstractOllamaFilterMapping {
 }
 
 final class OllamaSemanticFilter {
-    private static final String OLLAMA_API_URL = "http://apache-wayang-ollama:11434/api/generate";
+    private static final String OLLAMA_API_URL = "http://ollama:11434/api/generate";
     private static final String MODEL_NAME = "tinyllama";
     private static final HttpClient httpClient = HttpClient.newHttpClient();
 
