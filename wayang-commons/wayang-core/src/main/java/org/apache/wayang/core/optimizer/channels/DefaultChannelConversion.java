@@ -72,6 +72,18 @@ public class DefaultChannelConversion extends ChannelConversion {
     public DefaultChannelConversion(
             ChannelDescriptor sourceChannelDescriptor,
             ChannelDescriptor targetChannelDescriptor,
+            BiFunction<Channel, Configuration, ExecutionOperator> executionOperatorFactory) {
+        this(
+                sourceChannelDescriptor,
+                targetChannelDescriptor,
+                executionOperatorFactory,
+                "via " + executionOperatorFactory.getClass().getSimpleName()
+        );
+    }
+
+    public DefaultChannelConversion(
+            ChannelDescriptor sourceChannelDescriptor,
+            ChannelDescriptor targetChannelDescriptor,
             BiFunction<Channel, Configuration, ExecutionOperator> executionOperatorFactory,
             String name) {
         super(sourceChannelDescriptor, targetChannelDescriptor);
@@ -89,13 +101,31 @@ public class DefaultChannelConversion extends ChannelConversion {
         assert executionOperator.getNumInputs() <= 1 && executionOperator.getNumOutputs() <= 1;
         executionOperator.setAuxiliary(true);
 
+        if (sourceChannel != null && sourceChannel.getProducerSlot() != null && executionOperator.getNumInputs() > 0) {
+            org.apache.wayang.core.types.DataSetType<?> sourceChannelType = sourceChannel.getProducerSlot().getType();
+            org.apache.wayang.core.types.DataSetType<?> inputType = executionOperator.getInput(0).getType();
+            if (sourceChannelType != null && inputType != null && !inputType.isSupertypeOf(sourceChannelType)) {
+                try {
+                    java.lang.reflect.Method adaptTypeMethod = executionOperator.getClass().getMethod("adaptType", org.apache.wayang.core.types.DataSetType.class);
+                    adaptTypeMethod.invoke(executionOperator, sourceChannelType);
+                } catch (NoSuchMethodException e) {
+                    throw new IllegalArgumentException(String.format(
+                            "Cannot convert channel %s of type %s with %s of type %s: type mismatch.",
+                            sourceChannel, sourceChannelType, executionOperator, inputType));
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(String.format(
+                            "Cannot convert channel %s of type %s with %s of type %s: type mismatch.",
+                            sourceChannel, sourceChannelType, executionOperator, inputType), e);
+                }
+            }
+        }
+
         // Set up the Channels and the ExecutionTask.
         final ExecutionTask task = new ExecutionTask(executionOperator, 1, 1);
         sourceChannel.addConsumer(task, 0);
         final Channel outputChannel = task.initializeOutputChannel(0, configuration);
         sourceChannel.addSibling(outputChannel);
         setCardinalityAndTimeEstimates(sourceChannel, optimizationContexts, optCardinality, task);
-
 
         return outputChannel;
     }
