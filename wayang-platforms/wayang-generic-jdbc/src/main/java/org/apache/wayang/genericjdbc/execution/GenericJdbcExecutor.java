@@ -62,7 +62,7 @@ public class GenericJdbcExecutor extends ExecutorTemplate {
 
     private final GenericJdbcPlatform platform;
 
-    private final Connection connection = null;
+    private final Connection connection;
 
     private final Logger logger = LogManager.getLogger(this.getClass());
 
@@ -71,7 +71,8 @@ public class GenericJdbcExecutor extends ExecutorTemplate {
     public GenericJdbcExecutor(GenericJdbcPlatform platform, Job job) {
         super(job.getCrossPlatformExecutor());
         this.platform = platform;
-//        this.connection = this.platform.createDatabaseDescriptor(job.getConfiguration()).createJdbcConnection();
+        this.connection = this.platform.createDatabaseDescriptor(job.getConfiguration(), "genericjdbc")
+                .createJdbcConnection();
     }
 
     @Override
@@ -221,12 +222,11 @@ public class GenericJdbcExecutor extends ExecutorTemplate {
 
     @Override
     public void dispose() {
-//        try {
-//            this.connection.close();
-//        } catch (SQLException e) {
-//            this.logger.error("Could not close JDBC connection to PostgreSQL correctly.", e);
-//        }
-        return;
+        try {
+            this.connection.close();
+        } catch (SQLException e) {
+            this.logger.error("Could not close JDBC connection to PostgreSQL correctly.", e);
+        }
     }
 
     @Override
