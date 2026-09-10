@@ -18,11 +18,16 @@
 
 package org.apache.wayang.semantic;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
@@ -52,9 +57,52 @@ import org.apache.wayang.semantic.execution.OllamaExecutor;
 import org.apache.wayang.semantic.operators.OllamaFilterOperator;
 import org.apache.wayang.semantic.platform.OllamaPlatform;
 import org.apache.wayang.semantic.plugin.SemanticPlugin;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.sun.net.httpserver.HttpServer;
+
 class SemBenchTest {
+
+    /**
+     * In-process stand-in for a real Ollama server: it never leaves the JVM and never needs a model
+     * to be pulled, so the test runs unmodified in CI. It answers with the same response envelope a
+     * real Ollama server would ("{"response":"..."}"), classifying sentiment by a keyword heuristic
+     * on the prompt text, so the assertions below exercise genuine end-to-end behavior of the plan
+     * (filtering, the semantic operator, and JSON parsing) rather than a canned constant.
+     */
+    private static final String[] NEGATIVE_KEYWORDS = {"terrible", "disappointed", "boring", "not recommend"};
+
+    private HttpServer mockOllamaServer;
+
+    @BeforeEach
+    void startMockOllamaServer() throws IOException {
+        this.mockOllamaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        this.mockOllamaServer.createContext("/api/generate", exchange -> {
+            final String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            final boolean isNegative = Arrays.stream(NEGATIVE_KEYWORDS)
+                    .anyMatch(keyword -> requestBody.toLowerCase().contains(keyword));
+            final String responseBody = String.format("{\"response\":\"%s\"}", isNegative ? "NEGATIVE" : "POSITIVE");
+            final byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            try (OutputStream responseStream = exchange.getResponseBody()) {
+                responseStream.write(responseBytes);
+            }
+        });
+        this.mockOllamaServer.start();
+
+        final int port = this.mockOllamaServer.getAddress().getPort();
+        OllamaSemanticFilter.setApiUrl("http://127.0.0.1:" + port + "/api/generate");
+    }
+
+    @AfterEach
+    void stopMockOllamaServer() {
+        this.mockOllamaServer.stop(0);
+    }
+
     private static List<Review> loadReviews() {
         return Arrays.asList(new Review("taken_1", "The movie was fantastic. Great acting and an engaging story."),
                 new Review("taken_2", "I was disappointed. The plot was boring and too long."),
@@ -139,6 +187,12 @@ class SemBenchTest {
                     .withTargetModels(OllamaModel1FilterOperator.class, OllamaModel2FilterOperator.class, OllamaModel3FilterOperator.class)
                 .count()
                 .collect();
+
+        // Of the two "taken_3" reviews, only the "Absolutely loved it!" one is positive; the mock
+        // Ollama server classifies by keyword, so this checks the plan actually ran the semantic
+        // filter rather than merely completing without error.
+        assertEquals(1, positiveReviewCnt.size());
+        assertEquals(1L, positiveReviewCnt.iterator().next());
     }
 }
 
@@ -357,9 +411,17 @@ final class OllamaModel3FilterMapping extends AbstractOllamaFilterMapping {
 }
 
 final class OllamaSemanticFilter {
-    private static final String OLLAMA_API_URL = "http://ollama:11434/api/generate";
+    private static volatile String OLLAMA_API_URL = "http://ollama:11434/api/generate";
     private static final String MODEL_NAME = "tinyllama";
     private static final HttpClient httpClient = HttpClient.newHttpClient();
+
+    /**
+     * Points calls at a different Ollama-compatible endpoint, e.g. an in-process mock server for
+     * tests, so the real HTTP wiring gets exercised without depending on an external Ollama instance.
+     */
+    static void setApiUrl(final String apiUrl) {
+        OLLAMA_API_URL = apiUrl;
+    }
 
     public static boolean isPositiveSentiment(final Review review) throws IOException, InterruptedException {
         final String prompt = String.format("Analyze the sentiment of this movie review. "
