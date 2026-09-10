@@ -45,10 +45,9 @@ import org.apache.iceberg.Schema
 import org.apache.iceberg.FileFormat
 import org.apache.iceberg.catalog.{Catalog, TableIdentifier}
 
-
-
 import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
+import scala.annotation.varargs
 
 /**
   * Trait/interface for builders of [[DataQuanta]]. The purpose of the builders is to provide a convenient
@@ -281,6 +280,9 @@ trait DataQuantaBuilder[+This <: DataQuantaBuilder[_, Out], Out] extends Logging
                          that: DataQuantaBuilder[_, ThatOut],
                          thatKeyUdf: SerializableFunction[ThatOut, Key]) =
     new JoinDataQuantaBuilder(this, that, thisKeyUdf, thatKeyUdf)
+
+  def semanticFilter(prompt: String) = 
+    new SemanticFilterDataQuantaBuilder[Out](this, prompt)
 
   /**
     * Feed the built [[DataQuanta]] into a spatial filter operator.
@@ -2145,6 +2147,42 @@ class KeyedDataQuantaBuilder[Out, Key](private val dataQuantaBuilder: DataQuanta
     dataQuantaBuilder.coGroup(this.keyExtractor, that.dataQuantaBuilder, that.keyExtractor)
 
 }
+
+/**
+  * [[DataQuantaBuilder]] implementation for [[org.apache.wayang.basic.operators.SemanticFilterOperator]]s.
+  *
+  * @param inputDataQuanta [[DataQuantaBuilder]] for the input [[DataQuanta]]
+  * @param udf             UDF for the [[SemanticFilterOperator]]
+  */
+class SemanticFilterDataQuantaBuilder[T](inputDataQuanta: DataQuantaBuilder[_, T], prompt: String)
+                                (implicit javaPlanBuilder: JavaPlanBuilder)
+  extends BasicDataQuantaBuilder[SemanticFilterDataQuantaBuilder[T], T] {
+
+    // Reuse the input TypeTrap to enforce type equality between input and output.
+    override def getOutputTypeTrap: TypeTrap = inputDataQuanta.outputTypeTrap
+
+    /** [[LoadProfileEstimator]] to estimate the [[LoadProfile]] of the [[udf]]. */
+    private var udfLoadProfileEstimator: LoadProfileEstimator = _
+
+    /** Selectivity of the filter predicate. */
+    private var selectivity: ProbabilisticDoubleInterval = _
+
+    /*
+
+    */
+    private val targetModels: ListBuffer[AnyRef] = ListBuffer()
+
+    @varargs def withTargetModels(models: AnyRef *): SemanticFilterDataQuantaBuilder[T] = {
+        models.foreach(targetModels.+=_)
+        this
+      }
+
+    override protected def build = applyTargetPlatforms(
+      inputDataQuanta.dataQuanta()
+          .semanticFilterPrompt(prompt, targetModels: _ *), 
+      this.getTargetPlatforms()
+    )
+  }
 
 class SpatialFilterDataQuantaBuilder[T](inputDataQuanta: DataQuantaBuilder[_, T],
                                         keySelector: SerializableFunction[T, _ <: SpatialGeometry],

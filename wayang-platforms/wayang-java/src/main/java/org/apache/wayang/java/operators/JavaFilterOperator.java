@@ -50,6 +50,16 @@ public class JavaFilterOperator<Type>
         implements JavaExecutionOperator {
 
 
+    
+    /**
+     * Creates a new instance.
+     *
+     * @param type type of the dataset elements
+     */
+    public JavaFilterOperator(PredicateDescriptor<Type> predicateDescriptor) {
+        super(predicateDescriptor);
+    }
+
     /**
      * Creates a new instance.
      *
@@ -119,5 +129,4 @@ public class JavaFilterOperator<Type>
         assert index <= this.getNumOutputs() || (index == 0 && this.getNumOutputs() == 0);
         return Collections.singletonList(StreamChannel.DESCRIPTOR);
     }
-
 }
