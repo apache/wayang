@@ -97,7 +97,7 @@
         <scala.mayor.version>2.12</scala.mayor.version>
         <spark.version>3.5.7</spark.version>
         <antlr.version>4.9.3</antlr.version>
-        <parquet.version>1.13.1</parquet.version>
+        <parquet.version>1.15.2</parquet.version>
         <sedona.version>1.6.1</sedona.version>
         <flink.version>1.20.0</flink.version>
         <calcite.version>1.39.0</calcite.version>
