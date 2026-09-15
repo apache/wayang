@@ -1,0 +1,15 @@
+services:
+  wayang:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wayang-hackathon
+    working_dir: /workspace/wayang
+    volumes:
+      - .:/workspace/wayang
+      - wayang-maven-cache:/root/.m2
+    stdin_open: true
+    tty: true
+
+volumes:
+  wayang-maven-cache:
