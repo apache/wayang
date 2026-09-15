@@ -33,7 +33,7 @@ import java.sql.SQLException;
 /**
  * PostgreSQL implementation for the {@link TableSource}.
  */
-public abstract class JdbcTableSource extends TableSource implements JdbcExecutionOperator {
+public abstract class JdbcTableSource extends TableSource implements JdbcSourceOperator {
 
     /**
      * Creates a new instance.
@@ -58,6 +58,10 @@ public abstract class JdbcTableSource extends TableSource implements JdbcExecuti
         return this.getTableName();
     }
 
+    @Override
+    public String getSourceName() {
+        return this.getTableName();
+    }
 
     @Override
     public String getLoadProfileEstimatorConfigurationKey() {
