@@ -179,11 +179,14 @@ public class Record implements Serializable, Copyable<Record>, Comparable<Record
                 throw new IllegalStateException("Tried compare records with dissimilar classes had, this values: "
                         + this.values + ", that values: " + that.values + ", this item class: "
                         + this.values[i].getClass() + ", that item class: " + that.values[i].getClass());
+
+            final Comparable thisValue = (Comparable) this.values[i];
+            final int comparison = thisValue.compareTo(that.values[i]);
+            if (comparison != 0) {
+                return comparison;
+            }
         }
 
-        final Comparable[] thisComparables = (Comparable<?>[]) values;
-        final Comparable[] thatComparables = (Comparable<?>[]) that.values;
-
-        return Arrays.compare(thisComparables, thatComparables);
+        return 0;
     }
 }
