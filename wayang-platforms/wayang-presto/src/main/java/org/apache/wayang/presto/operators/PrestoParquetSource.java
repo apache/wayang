@@ -16,27 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.wayang.bigquery.mapping;
+package org.apache.wayang.presto.operators;
 
-import org.apache.wayang.core.mapping.Mapping;
-
-import java.util.Arrays;
-import java.util.Collection;
+import org.apache.wayang.basic.operators.ParquetSource;
+import org.apache.wayang.jdbc.operators.JdbcParquetSource;
 
 /**
- * Register for the {@link Mapping}s supported for this platform.
+ * Presto implementation for Parquet-backed SQL relations.
  */
-public class Mappings {
+public class PrestoParquetSource extends JdbcParquetSource implements PrestoExecutionOperator {
 
-    public static final Collection<Mapping> ALL = Arrays.asList(
-            new FilterMapping(),
-            new GlobalReduceMapping(),
-            new JoinMapping(),
-            new ParquetSourceMapping(),
-            new ProjectionMapping(),
-            new ReduceByMapping(),
-            new SortMapping(),
-            new TableSinkMapping()
-    );
+    public PrestoParquetSource(String sourceName, String[] projection, String... columnNames) {
+        super(sourceName, projection, columnNames);
+    }
 
+    public PrestoParquetSource(ParquetSource that) {
+        super(that);
+    }
 }

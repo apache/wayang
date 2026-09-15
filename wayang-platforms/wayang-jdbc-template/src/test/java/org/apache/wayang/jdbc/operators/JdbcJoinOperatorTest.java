@@ -66,6 +66,74 @@ class JdbcJoinOperatorTest extends OperatorTestBase {
             statement.execute("DROP TABLE IF EXISTS shipments");
         }
     }
+
+    @Test
+    void testParquetSourceJoinResolvesConfiguredSourceMappings() throws SQLException {
+        Configuration configuration = new Configuration();
+        configuration.setProperty(
+                "wayang.hsqldb.parquetsource.mappings",
+                "file:///warehouse/testA=testA;file:///warehouse/testB=testB"
+        );
+
+        Job job = mock(Job.class);
+        when(job.getConfiguration()).thenReturn(configuration);
+        when(job.getCrossPlatformExecutor()).thenReturn(new CrossPlatformExecutor(job, new NoInstrumentationStrategy()));
+        SqlQueryChannel.Descriptor sqlChannelDescriptor = HsqldbPlatform.getInstance().getSqlQueryChannelDescriptor();
+
+        ExecutionStage sqlStage = mock(ExecutionStage.class);
+
+        HsqldbParquetSource sourceA = new HsqldbParquetSource("file:///warehouse/testA", null, "a", "b");
+        HsqldbParquetSource sourceB = new HsqldbParquetSource("file:///warehouse/testB", null, "a", "b");
+
+        ExecutionTask sourceATask = new ExecutionTask(sourceA);
+        sourceATask.setOutputChannel(0, new SqlQueryChannel(sqlChannelDescriptor, sourceA.getOutput(0)));
+        sourceATask.setStage(sqlStage);
+
+        ExecutionTask sourceBTask = new ExecutionTask(sourceB);
+        sourceBTask.setOutputChannel(0, new SqlQueryChannel(sqlChannelDescriptor, sourceB.getOutput(0)));
+        sourceBTask.setStage(sqlStage);
+
+        final ExecutionOperator joinOperator = new HsqldbJoinOperator<Integer>(
+            new TransformationDescriptor<Record, Integer>(
+                (record) -> (Integer) record.getField(0),
+                Record.class,
+                Integer.class
+            ).withSqlImplementation("file:///warehouse/testA", "a"),
+            new TransformationDescriptor<Record, Integer>(
+                (record) -> (Integer) record.getField(0),
+                Record.class,
+                Integer.class
+            ).withSqlImplementation("file:///warehouse/testB", "a")
+        );
+
+        ExecutionTask joinTask = new ExecutionTask(joinOperator);
+        sourceATask.getOutputChannel(0).addConsumer(joinTask, 0);
+        sourceBTask.getOutputChannel(0).addConsumer(joinTask, 1);
+        joinTask.setOutputChannel(0, new SqlQueryChannel(sqlChannelDescriptor, joinOperator.getOutput(0)));
+        joinTask.setStage(sqlStage);
+
+        when(sqlStage.getStartTasks()).thenReturn(new LinkedHashSet<>(Arrays.asList(sourceBTask, sourceATask)));
+        when(sqlStage.getAllTasks()).thenReturn(new LinkedHashSet<>(Arrays.asList(sourceBTask, sourceATask, joinTask)));
+        when(sqlStage.getTerminalTasks()).thenReturn(Collections.singleton(joinTask));
+
+        ExecutionStage nextStage = mock(ExecutionStage.class);
+
+        SqlToStreamOperator sqlToStreamOperator = new SqlToStreamOperator(HsqldbPlatform.getInstance());
+        ExecutionTask sqlToStreamTask = new ExecutionTask(sqlToStreamOperator);
+        joinTask.getOutputChannel(0).addConsumer(sqlToStreamTask, 0);
+        sqlToStreamTask.setStage(nextStage);
+
+        JdbcExecutor executor = new JdbcExecutor(HsqldbPlatform.getInstance(), job);
+        executor.execute(sqlStage, new DefaultOptimizationContext(job), job.getCrossPlatformExecutor());
+
+        SqlQueryChannel.Instance sqlQueryChannelInstance =
+                (SqlQueryChannel.Instance) job.getCrossPlatformExecutor().getChannelInstance(sqlToStreamTask.getInputChannel(0));
+
+        assertEquals(
+            "SELECT * FROM testA JOIN testB ON testB.a=testA.a",
+            sqlQueryChannelInstance.getSqlQuery()
+        );
+    }
     @Test
     void testWithHsqldb() throws SQLException {
         Configuration configuration = new Configuration();
@@ -256,6 +324,18 @@ class JdbcJoinOperatorTest extends OperatorTestBase {
             resultSet.close();
         } finally {
             jdbcConnection.close();
+        }
+    }
+
+    private static class HsqldbParquetSource extends JdbcParquetSource {
+
+        HsqldbParquetSource(String inputUrl, String[] projection, String... columnNames) {
+            super(inputUrl, projection, columnNames);
+        }
+
+        @Override
+        public HsqldbPlatform getPlatform() {
+            return HsqldbPlatform.getInstance();
         }
     }
 

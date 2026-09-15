@@ -66,11 +66,17 @@ public abstract class JdbcJoinOperator<KeyType>
 
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
+        return this.createSqlClause(connection, compiler, null);
+    }
+
+    @Override
+    public String createSqlClause(Connection connection, FunctionCompiler compiler, Configuration configuration) {
         final Tuple<String, String> left = this.keyDescriptor0.getSqlImplementation();
         final Tuple<String, String> right = this.keyDescriptor1.getSqlImplementation();
-        final String leftTableName = left.field0;
+        final String platformId = this.getPlatform().getPlatformId();
+        final String leftTableName = JdbcParquetSource.resolveSourceName(configuration, platformId, left.field0);
         final String leftKeys = left.field1;
-        final String rightTableName = right.field0;
+        final String rightTableName = JdbcParquetSource.resolveSourceName(configuration, platformId, right.field0);
         final String rightKeys = right.field1;
 
         if (leftKeys.contains(",") && rightKeys.contains(",")) {
