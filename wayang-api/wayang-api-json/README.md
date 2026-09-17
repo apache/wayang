@@ -31,7 +31,7 @@
 
 ```bash
 cd wayang-assembly/target/
-tar -xvf apache-wayang-assembly-1.1.1-dist.tar.gz
-cd wayang-1.1.1
+tar -xvf wayang-assembly-1.1.2-SNAPSHOT-dist.tar.gz
+cd wayang-1.1.2-SNAPSHOT
 ./bin/wayang-submit org.apache.wayang.api.json.Main
 ```
