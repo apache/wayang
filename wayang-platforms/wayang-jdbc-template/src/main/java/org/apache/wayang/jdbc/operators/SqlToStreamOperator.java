@@ -23,6 +23,8 @@ import org.apache.wayang.basic.types.RecordType;
 import org.apache.wayang.core.api.exception.WayangException;
 import org.apache.wayang.core.optimizer.OptimizationContext;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimators;
+import org.apache.wayang.core.plan.executionplan.Channel;
+import org.apache.wayang.core.plan.executionplan.ExecutionTask;
 import org.apache.wayang.core.plan.wayangplan.Operator;
 import org.apache.wayang.core.plan.wayangplan.UnaryToUnaryOperator;
 import org.apache.wayang.core.platform.ChannelDescriptor;
@@ -40,8 +42,13 @@ import org.apache.wayang.jdbc.channels.SqlQueryChannel;
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
 import org.apache.logging.log4j.LogManager;
 
+import org.apache.wayang.basic.data.Tuple2;
+import org.apache.wayang.basic.operators.JoinOperator;
+
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
@@ -57,7 +64,7 @@ import java.util.stream.StreamSupport;
 /**
  * This {@link Operator} converts {@link SqlQueryChannel}s to {@link StreamChannel}s.
  */
-public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> implements JavaExecutionOperator, JsonSerializable {
+public class SqlToStreamOperator<Type> extends UnaryToUnaryOperator<Type, Type> implements JavaExecutionOperator, JsonSerializable {
 
     private final JdbcPlatformTemplate jdbcPlatform;
 
@@ -66,27 +73,38 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
      *
      * @param jdbcPlatform from which the SQL data comes
      */
+    @SuppressWarnings("unchecked")
     public SqlToStreamOperator(JdbcPlatformTemplate jdbcPlatform) {
-        this(jdbcPlatform, DataSetType.createDefault(Record.class));
+        this(jdbcPlatform, (DataSetType<Type>) DataSetType.createDefault(Record.class));
     }
 
     /**
      * Creates a new instance.
      *
      * @param jdbcPlatform from which the SQL data comes
-     * @param dataSetType  type of the {@link Record}s being transformed; see {@link RecordType}
+     * @param dataSetType  type of the data passed through the channel (e.g. {@link Record} or {@link Tuple2})
      */
-    public SqlToStreamOperator(JdbcPlatformTemplate jdbcPlatform, DataSetType<Record> dataSetType) {
-        super(dataSetType, dataSetType, false);
+    @SuppressWarnings("unchecked")
+    public SqlToStreamOperator(JdbcPlatformTemplate jdbcPlatform, DataSetType<?> dataSetType) {
+        super((DataSetType<Type>) dataSetType, (DataSetType<Type>) dataSetType, false);
         this.jdbcPlatform = jdbcPlatform;
     }
 
-    protected SqlToStreamOperator(SqlToStreamOperator that) {
+    @SuppressWarnings("unchecked")
+    public void adaptType(DataSetType<?> newType) {
+        if (newType != null) {
+            this.inputSlots[0] = new org.apache.wayang.core.plan.wayangplan.InputSlot<>("in", this, (DataSetType<Type>) newType);
+            this.outputSlots[0] = new org.apache.wayang.core.plan.wayangplan.OutputSlot<>("out", this, (DataSetType<Type>) newType);
+        }
+    }
+
+    protected SqlToStreamOperator(SqlToStreamOperator<Type> that) {
         super(that);
         this.jdbcPlatform = that.jdbcPlatform;
     }
 
     @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public Tuple<Collection<ExecutionLineageNode>, Collection<ChannelInstance>> evaluate(
             ChannelInstance[] inputs,
             ChannelInstance[] outputs,
@@ -101,11 +119,31 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
                 .createDatabaseDescriptor(executor.getConfiguration())
                 .createJdbcConnection();
 
-        Iterator<Record> resultSetIterator = new ResultSetIterator(connection, input.getSqlQuery());
-        Spliterator<Record> resultSetSpliterator = Spliterators.spliteratorUnknownSize(resultSetIterator, 0);
-        Stream<Record> resultSetStream = StreamSupport.stream(resultSetSpliterator, false);
+        boolean isTuple = false;
+        if (this.getOutputType() != null && Tuple2.class.isAssignableFrom(this.getOutputType().getDataUnitType().getTypeClass())) {
+            isTuple = true;
+        } else if (input.getChannel() != null) {
+            if (input.getChannel().getProducerSlot() != null &&
+                    Tuple2.class.isAssignableFrom(input.getChannel().getProducerSlot().getType().getDataUnitType().getTypeClass())) {
+                isTuple = true;
+            } else if (input.getChannel().getProducer() != null &&
+                    input.getChannel().getProducer().getOperator() instanceof JoinOperator) {
+                isTuple = true;
+            }
+        }
 
-        output.accept(resultSetStream);
+        Iterator<?> resultSetIterator;
+        if (isTuple) {
+            int leftColumnCount = resolveLeftColumnCount(connection, input);
+            resultSetIterator = new Tuple2ResultSetIterator(connection, input.getSqlQuery(), leftColumnCount);
+        } else {
+            resultSetIterator = new ResultSetIterator(connection, input.getSqlQuery());
+        }
+
+        Spliterator<?> resultSetSpliterator = Spliterators.spliteratorUnknownSize(resultSetIterator, 0);
+        Stream<?> resultSetStream = StreamSupport.stream(resultSetSpliterator, false);
+
+        output.accept((Stream) resultSetStream);
 
         ExecutionLineageNode queryLineageNode = new ExecutionLineageNode(operatorContext);
         queryLineageNode.add(LoadProfileEstimators.createFromSpecification(
@@ -121,6 +159,76 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
         output.getLineage().addPredecessor(outputLineageNode);
 
         return queryLineageNode.collectAndMark();
+    }
+
+    public static int resolveLeftColumnCount(Connection connection, SqlQueryChannel.Instance input) {
+        try {
+            if (input.getChannel() != null && input.getChannel().getProducer() != null) {
+                Operator op = input.getChannel().getProducer().getOperator();
+                if (op instanceof JoinOperator) {
+                    JoinOperator<?, ?, ?> joinOp = (JoinOperator<?, ?, ?>) op;
+                    DataSetType<?> in0Type = joinOp.getInput(0).getType();
+                    if (in0Type != null && in0Type.getDataUnitType() instanceof RecordType) {
+                        int count = ((RecordType) in0Type.getDataUnitType()).getFieldNames().length;
+                        if (count > 0) return count;
+                    }
+                    if (joinOp.getKeyDescriptor0() != null && joinOp.getKeyDescriptor0().getSqlImplementation() != null) {
+                        String leftTable = joinOp.getKeyDescriptor0().getSqlImplementation().getField0();
+                        if (leftTable != null && !leftTable.isEmpty()) {
+                            int count = getTableColumnCount(connection, leftTable);
+                            if (count > 0) return count;
+                        }
+                    }
+                }
+                ExecutionTask producerTask = input.getChannel().getProducer();
+                if (producerTask.getNumInputChannels() > 0 && producerTask.getInputChannel(0) != null) {
+                    Channel leftInChannel = producerTask.getInputChannel(0);
+                    if (leftInChannel.getProducerSlot() != null && leftInChannel.getProducerSlot().getType() != null) {
+                        if (leftInChannel.getProducerSlot().getType().getDataUnitType() instanceof RecordType) {
+                            int count = ((RecordType) leftInChannel.getProducerSlot().getType().getDataUnitType()).getFieldNames().length;
+                            if (count > 0) return count;
+                        }
+                    }
+                    if (leftInChannel.getProducer() != null && leftInChannel.getProducer().getOperator() != null) {
+                        Operator leftProducerOp = leftInChannel.getProducer().getOperator();
+                        try {
+                            java.lang.reflect.Method getTableNameMethod = leftProducerOp.getClass().getMethod("getTableName");
+                            String tableName = (String) getTableNameMethod.invoke(leftProducerOp);
+                            if (tableName != null && !tableName.isEmpty()) {
+                                int count = getTableColumnCount(connection, tableName);
+                                if (count > 0) return count;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    public static int getTableColumnCount(Connection connection, String tableName) {
+        if (connection == null || tableName == null) return -1;
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            int count = 0;
+            try (ResultSet rs = metaData.getColumns(null, null, tableName, null)) {
+                while (rs.next()) count++;
+            }
+            if (count > 0) return count;
+
+            try (ResultSet rs = metaData.getColumns(null, null, tableName.toUpperCase(), null)) {
+                while (rs.next()) count++;
+            }
+            if (count > 0) return count;
+
+            try (ResultSet rs = metaData.getColumns(null, null, tableName.toLowerCase(), null)) {
+                while (rs.next()) count++;
+            }
+            return count;
+        } catch (SQLException e) {
+            return -1;
+        }
     }
 
     @Override
@@ -214,7 +322,110 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
         public void close() {
             if (this.resultSet != null) {
                 try {
+                    Statement st = this.resultSet.getStatement();
                     this.resultSet.close();
+                    if (st != null) {
+                        st.close();
+                    }
+                } catch (Throwable t) {
+                    LogManager.getLogger(this.getClass()).error("Could not close result set.", t);
+                } finally {
+                    this.resultSet = null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Exposes a {@link ResultSet} as an {@link Iterator} of {@link Tuple2} containing two {@link Record}s.
+     */
+    public static class Tuple2ResultSetIterator implements Iterator<Tuple2<Record, Record>>, AutoCloseable {
+
+        private ResultSet resultSet;
+        private Tuple2<Record, Record> next;
+        private int leftColumnCount;
+
+        public Tuple2ResultSetIterator(Connection connection, String sqlQuery, int leftColumnCount) {
+            this.leftColumnCount = leftColumnCount;
+            try {
+                Statement st = connection.createStatement();
+                this.resultSet = st.executeQuery(sqlQuery);
+            } catch (SQLException e) {
+                this.close();
+                throw new WayangException("Could not execute SQL.", e);
+            }
+            this.moveToNext();
+        }
+
+        private void moveToNext() {
+            try {
+                if (this.resultSet == null || !this.resultSet.next()) {
+                    this.next = null;
+                    this.close();
+                } else {
+                    ResultSetMetaData metaData = this.resultSet.getMetaData();
+                    final int totalColumnCount = metaData.getColumnCount();
+                    if (this.leftColumnCount <= 0 || this.leftColumnCount >= totalColumnCount) {
+                        int detectedCount = 0;
+                        String firstTable = null;
+                        try {
+                            firstTable = metaData.getTableName(1);
+                        } catch (Exception ignored) {}
+                        if (firstTable != null && !firstTable.isEmpty()) {
+                            for (int i = 1; i <= totalColumnCount; i++) {
+                                if (firstTable.equalsIgnoreCase(metaData.getTableName(i))) {
+                                    detectedCount++;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        if (detectedCount > 0 && detectedCount < totalColumnCount) {
+                            this.leftColumnCount = detectedCount;
+                        } else {
+                            this.leftColumnCount = totalColumnCount / 2;
+                        }
+                    }
+
+                    int rightColumnCount = totalColumnCount - this.leftColumnCount;
+                    Object[] leftValues = new Object[this.leftColumnCount];
+                    for (int i = 0; i < this.leftColumnCount; i++) {
+                        leftValues[i] = this.resultSet.getObject(i + 1);
+                    }
+                    Object[] rightValues = new Object[rightColumnCount];
+                    for (int i = 0; i < rightColumnCount; i++) {
+                        rightValues[i] = this.resultSet.getObject(this.leftColumnCount + i + 1);
+                    }
+                    this.next = new Tuple2<>(new Record(leftValues), new Record(rightValues));
+                }
+            } catch (SQLException e) {
+                this.next = null;
+                this.close();
+                throw new WayangException("Exception while iterating the result set.", e);
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return this.next != null;
+        }
+
+        @Override
+        public Tuple2<Record, Record> next() {
+            Tuple2<Record, Record> curNext = this.next;
+            this.moveToNext();
+            return curNext;
+        }
+
+        @Override
+        public void close() {
+            if (this.resultSet != null) {
+                try {
+                    Statement st = this.resultSet.getStatement();
+                    this.resultSet.close();
+                    if (st != null) {
+                        st.close();
+                    }
                 } catch (Throwable t) {
                     LogManager.getLogger(this.getClass()).error("Could not close result set.", t);
                 } finally {
@@ -229,7 +440,7 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
         return new WayangJsonObj().put("platform", this.jdbcPlatform.getClass().getCanonicalName());
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings("rawtypes")
     public static SqlToStreamOperator fromJson(WayangJsonObj wayangJsonObj) {
         final String platformClassName = wayangJsonObj.getString("platform");
         JdbcPlatformTemplate jdbcPlatform = ReflectionUtils.evaluate(platformClassName + ".getInstance()");
