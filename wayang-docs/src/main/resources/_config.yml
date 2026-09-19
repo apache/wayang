@@ -17,7 +17,7 @@
 
 url: "http://127.0.0.1:4000"
 baseurl: ""
-title: "Apache Wayang (incubating) - Documentation"
+title: "Apache Wayang - Documentation"
 permalink: pretty
 collections:
   publications:

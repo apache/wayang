@@ -13,97 +13,104 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 header:
-#  - url: /what_is_wayang/
-#    title: What is Wayang?
-#    identifier: what_wayang
-#    weight: 1
+  - url: /what_is_wayang/
+    title: What is Wayang?
+    identifier: what_wayang
+    weight: 1
 
-#  - url: /getting_start/
-#    title: Getting Started with Wayang
-#    identifier: getting_start
-#    weight: 2
+  - url: /getting_start/
+    title: Getting Started
+    identifier: getting_start
+    weight: 2
 
-#  - url: /using_wayang/
-#    title: Using Wayang
-#    identifier: using
-#    weight: 3
-
-#  - url: /extending_wayang/
-#    title: Extending Wayang
-#    identifier: extending
-#    weight: 4
+  - url: /using_wayang/
+    title: Using Wayang
+    identifier: using
+    weight: 3
 
   - url: /how_contribute/
     title: How To Contribute
     identifier: contribute
+    weight: 4
+
+  - url: https://wayang.apache.org/docs/api/javadocs/
+    title: API JavaDocs
+    identifier: javadoc
     weight: 5
 
+getting_start:
+  - url: /getting_start/how_build/
+    title: How To Build Wayang
+    identifier: build
+    weight: 0
 
-#getting_start:
-#  - url: /getting_start/how_build/
-#    title: How To Build Wayang
-#    identifier: build
-#    weight: 0
-#
-#  - url: /getting_start/how_install/
-#    title: How To Install Wayang
-#    identifier: install
-#    weight: 1
-#
-#  - url: /getting_start/how_run/
-#    title: How To Run Wayang
-#    identifier: run
-#    weight: 2
-#
-#  - url: /getting_start/writting_wayang_plan/
-#    title: Writting a Wayang Plan
-#    identifier: writting
-#    weight: 3
+  - url: /getting_start/how_install/
+    title: How To Install Wayang
+    identifier: install
+    weight: 1
 
-#using:
-#  - url: /using_wayang/api_java_scala/
-#    title: API Java/Scala
-#    identifier: api_java
-#    weight: 0
-#
-#  - url: /using_wayang/api_python/
-#    title: API Python
-#    identifier: api_python
-#    weight: 1
-#
-#  - url: /using_wayang/api_rest/
-#    title: API REST
-#    identifier: api_rest
-#    weight: 2
+  - url: /getting_start/how_run/
+    title: How To Run Wayang
+    identifier: run
+    weight: 2
 
-#  - url: /using_wayang/api_sql/
-#    title: API SQL
-#    identifier: api_sql
-#    weight: 3
-#
-#  - url: /using_wayang/api_jdbc/
-#    title: API JDBC
-#    identifier: api_jdbc
-#    weight: 4
+  - url: /getting_start/writting_wayang_plan/
+    title: Wayang Abstractions & Plans
+    identifier: writting
+    weight: 3
 
-#extending:
-#  - url: /extending_wayang/adding_platform/
-#    title: Adding Platform
-#    identifier: platform
-#    weight: 0
+using:
+  - url: /using_wayang/api_java_scala/
+    title: API Java/Scala
+    identifier: api_java
+    weight: 0
+
+  - url: /using_wayang/api_python/
+    title: API Python
+    identifier: api_python
+    weight: 1
+
+  - url: /using_wayang/api_rest/
+    title: API REST
+    identifier: api_rest
+    weight: 2
+
+  - url: /using_wayang/api_sql/
+    title: API SQL
+    identifier: api_sql
+    weight: 3
+
+  - url: /using_wayang/api_jdbc/
+    title: API JDBC
+    identifier: api_jdbc
+    weight: 4
+
+  - url: /using_wayang/configuring_wayang/
+    title: Configuring Wayang
+    identifier: configuring
+    weight: 5
+
+  - url: /using_wayang/cost_model_calibration/
+    title: Cost Model Calibration
+    identifier: cost_model
+    weight: 6
+
+  - url: /using_wayang/scalable_deep_learning/
+    title: Scalable Deep Learning
+    identifier: deep_learning
+    weight: 7
 
 contribute:
   - url: /how_contribute/code_changes/
     title: Code Changes
     identifier: code_changes
-    weight: 4
-
+    weight: 1
 
 code_changes:
   - url: /how_contribute/code_changes/preparing_contribute_code_changes/
     title: Preparing to Contribute Code Changes
     identifier: preparing_code_changes
-    weight: 5
+    weight: 1
 
 
 
