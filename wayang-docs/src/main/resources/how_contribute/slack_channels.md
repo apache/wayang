@@ -28,5 +28,5 @@ menus:
 
 In case of any doubts, our community will be glad to answer your questions.
 
-Join the Apache Wayang (incubating) slack. After creating account in slack you can join #wayang where you can look for help in using and developing Apache Wayang (incubating).
+Join the Apache Wayang slack. After creating account in slack you can join #wayang where you can look for help in using and developing Apache Wayang.
 
