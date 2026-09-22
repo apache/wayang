@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 
+import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.api.exception.WayangException;
 import org.apache.wayang.core.optimizer.OptimizationContext;
 import org.apache.wayang.core.optimizer.enumeration.PlanImplementation;
@@ -40,26 +41,56 @@ import org.apache.wayang.core.plan.wayangplan.WayangPlan;
 import org.apache.wayang.core.platform.Junction;
 
 public class TreeEncoder {
+
+    public static final String ENCODE_IDS_PROPERTY = "wayang.ml.encoding.encode-ids";
+
     private final OneHotMappings mappings;
 
+    private Configuration configuration;
+
     public TreeEncoder(final OneHotMappings mappings) {
+        this(mappings, null);
+    }
+
+    public TreeEncoder(final OneHotMappings mappings, final Configuration configuration) {
         this.mappings = mappings;
+        this.configuration = configuration;
     }
 
     public OneHotMappings getMappings() {
         return this.mappings;
     }
 
+    public Configuration getConfiguration() {
+        return this.configuration;
+    }
+
+    public void setConfiguration(final Configuration configuration) {
+        this.configuration = configuration;
+    }
+
+    private boolean resolveEncodeIds(final OptimizationContext optimizationContext) {
+        final Configuration config = this.configuration != null
+                ? this.configuration
+                : (optimizationContext != null ? optimizationContext.getConfiguration() : null);
+        if (config != null) {
+            return config.getOptionalBooleanProperty(ENCODE_IDS_PROPERTY)
+                    .orElseGet(() -> config.getBooleanProperty("wayang.ml.encode-ids", false));
+        }
+        return false;
+    }
+
     public TreeNode encode(final PlanImplementation plan) {
+        return this.encode(plan, this.resolveEncodeIds(plan.getOptimizationContext()));
+    }
+
+    public TreeNode encode(final PlanImplementation plan, final boolean encodeIds) {
         final List<TreeNode> result = new ArrayList<TreeNode>();
 
         final HashMap<Operator, Collection<Operator>> tree = new HashMap<>();
         final List<ExecutionOperator> sinks = plan.getOperators().stream().filter(Operator::isSink).toList();
 
         final Map<OutputSlot<?>, Junction> junctions = plan.getJunctions();
-
-        // TODO: convert to config
-        final boolean encodeIds = false;
 
         for (final Operator sink : sinks) {
             final TreeNode sinkNode = traversePIOperator(sink, plan.getOptimizationContext(), encodeIds, junctions,
@@ -75,6 +106,10 @@ public class TreeEncoder {
         resultNode.rebalance();
 
         return resultNode;
+    }
+
+    public TreeNode encode(final WayangPlan plan, final OptimizationContext optimizationContext) {
+        return this.encode(plan, optimizationContext, this.resolveEncodeIds(optimizationContext));
     }
 
     public TreeNode encode(final WayangPlan plan, final OptimizationContext optimizationContext,
