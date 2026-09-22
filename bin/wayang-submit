@@ -129,7 +129,7 @@ FLAGS+=(
 )
 
 if [ "${FLAG_LOG}" = "true" ]; then
-	FLAGS+=("-Dlog4j.configuration=file://${WAYANG_CONF}/log4j.properties")
+	FLAGS+=("-Dlog4j2.configurationFile=file://${WAYANG_CONF}/log4j2.properties")
 fi
 
 if [ "${FLAG_WAYANG}" = "true" ]; then
