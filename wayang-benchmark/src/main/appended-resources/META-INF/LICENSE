@@ -3,5 +3,5 @@
 
 The files
 wayang-benchmark/src/main/java/org/apache/wayang/apps/terasort/Random16.java and
-wayang-benchmark/src/main/java/org/apache/wayang/apps/terasort/Unsigned.java
+wayang-benchmark/src/main/java/org/apache/wayang/apps/terasort/Unsigned16.java
 are from Apache Hadoop: https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-examples/src/main/java/org/apache/hadoop/examples/terasort/Random16.java
