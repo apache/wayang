@@ -16,27 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.wayang.bigquery.mapping;
+package org.apache.wayang.trino.operators;
 
-import org.apache.wayang.core.mapping.Mapping;
-
-import java.util.Arrays;
-import java.util.Collection;
+import org.apache.wayang.basic.operators.ParquetSource;
+import org.apache.wayang.jdbc.operators.JdbcParquetSource;
 
 /**
- * Register for the {@link Mapping}s supported for this platform.
+ * Trino implementation for Parquet-backed SQL relations.
  */
-public class Mappings {
+public class TrinoParquetSource extends JdbcParquetSource implements TrinoExecutionOperator {
 
-    public static final Collection<Mapping> ALL = Arrays.asList(
-            new FilterMapping(),
-            new GlobalReduceMapping(),
-            new JoinMapping(),
-            new ParquetSourceMapping(),
-            new ProjectionMapping(),
-            new ReduceByMapping(),
-            new SortMapping(),
-            new TableSinkMapping()
-    );
+    public TrinoParquetSource(String sourceName, String[] projection, String... columnNames) {
+        super(sourceName, projection, columnNames);
+    }
 
+    public TrinoParquetSource(ParquetSource that) {
+        super(that);
+    }
 }
