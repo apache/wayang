@@ -67,6 +67,8 @@ public class SqlContext extends WayangContext {
     private static final AtomicInteger jobId = new AtomicInteger(0);
 
     private final CalciteSchema calciteSchema;
+    private final Configuration originalConfiguration;
+
 
     public SqlContext() throws SQLException {
         this(new Configuration());
@@ -80,6 +82,7 @@ public class SqlContext extends WayangContext {
         this.withPlugin(Postgres.plugin());
 
         calciteSchema = SchemaUtils.getSchema(configuration);
+        this.originalConfiguration = configuration;
     }
 
     public SqlContext(final Configuration configuration, final List<Plugin> plugins) throws SQLException {
@@ -88,6 +91,7 @@ public class SqlContext extends WayangContext {
         for (final Plugin plugin : plugins) {
             this.withPlugin(plugin);
         }
+        this.originalConfiguration = configuration;
 
         calciteSchema = SchemaUtils.getSchema(configuration);
     }
@@ -215,7 +219,7 @@ public class SqlContext extends WayangContext {
         PrintUtils.print("After translating logical intermediate plan", wayangRel);
 
         final Collection<Record> collector = new ArrayList<>();
-        final WayangPlan wayangPlan = Optimizer.convert(wayangRel, collector);
+        final WayangPlan wayangPlan = Optimizer.convertWithConfig(wayangRel, this.originalConfiguration != null ? this.originalConfiguration : this.getConfiguration(), collector);
 
         this.execute(getJobName(), wayangPlan);
 
@@ -227,3 +231,8 @@ public class SqlContext extends WayangContext {
     }
 
 }
+
+
+
+
+
