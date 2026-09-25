@@ -29,6 +29,12 @@ import org.apache.wayang.core.types.DataSetType;
 public class TableSource extends UnarySource<Record> {
 
     private final String tableName;
+    private final String[] columnNames; // Line 32
+
+    // Add this method somewhere around line 35
+    public String[] getColumnNames() {
+        return this.columnNames;
+    }
 
     public String getTableName() {
         return tableName;
@@ -42,12 +48,15 @@ public class TableSource extends UnarySource<Record> {
      *                    into Wayang, so as to allow specific optimizations
      */
     public TableSource(String tableName, String... columnNames) {
-        this(tableName, createOutputDataSetType(columnNames));
+        super(createOutputDataSetType(columnNames));
+        this.tableName = tableName;
+        this.columnNames = columnNames; // Assigned here!
     }
 
     public TableSource(String tableName, DataSetType<Record> type) {
         super(type);
         this.tableName = tableName;
+        this.columnNames=new String[0];
     }
 
     /**
@@ -71,6 +80,7 @@ public class TableSource extends UnarySource<Record> {
     public TableSource(TableSource that) {
         super(that);
         this.tableName = that.getTableName();
+        this.columnNames = that.getColumnNames(); // ADD THIS LINE HERE!
     }
 
 }
