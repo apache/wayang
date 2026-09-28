@@ -1,0 +1,69 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements. See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership. The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Builds hackathon-CoC2026/Dockerfile (which bakes in a warm Maven cache,
+# see that file's comments) and publishes it to GitHub Container Registry.
+#
+# Deliberately manual (workflow_dispatch) rather than on every push: this
+# image is for a specific hackathon date, doesn't need to track every
+# commit to main, and a full build is expensive. Re-run manually whenever
+# the environment needs to pick up new commits before the event.
+#
+# NOTE: publishing to ghcr.io/apache/... requires GHCR to be enabled for
+# this repository under the ASF GitHub org. If this workflow fails on the
+# push step with a permissions error, that's an ASF INFRA setting, not a
+# problem with this workflow — check with infra or ask in the PR.
+
+name: Publish hackathon Docker image
+
+on:
+  workflow_dispatch: {}
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/wayang-hackathon
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: hackathon-CoC2026/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

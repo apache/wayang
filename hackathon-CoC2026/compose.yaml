@@ -1,0 +1,80 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements. See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership. The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Run from this folder with: docker compose up -d --build
+#
+# Paths below (context, volumes) are relative to THIS file, so `..` means
+# the repository root.
+
+services:
+  wayang:
+    # `docker compose up -d` (no --build) pulls this pre-built image, which
+    # already has its Maven cache warmed — this is what gets participants
+    # to a working setup in minutes on hackathon day. `docker compose up -d
+    # --build` ignores this and builds locally from the Dockerfile instead,
+    # which is slower (see README.md "Timing") but always matches your
+    # exact checkout — useful for contributors actively changing the
+    # Dockerfile/build itself, not needed for hackathon participants.
+    image: ghcr.io/apache/wayang-hackathon:latest
+    build:
+      context: ..
+      dockerfile: hackathon-CoC2026/Dockerfile
+    container_name: wayang-hackathon
+    working_dir: /workspace/wayang
+    volumes:
+      # Full repo, read-write, so edits made on the host (or inside the
+      # container) are shared both ways.
+      - ..:/workspace/wayang
+      # Named volume for the Maven local repo: keeps ~/.m2 between
+      # `docker compose down` / `up` cycles so dependencies aren't
+      # re-downloaded every time.
+      - wayang-maven-cache:/root/.m2
+    environment:
+      # Picked up by hackathon-CoC2026/examples/PostgresSmokeTest.java and
+      # can be used from any app via System.getenv(...) or by writing them
+      # into a wayang.properties file (see README.md).
+      WAYANG_POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/wayang_hackathon
+      WAYANG_POSTGRES_USER: wayang
+      WAYANG_POSTGRES_PASSWORD: wayang
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: wayang-hackathon-postgres
+    environment:
+      POSTGRES_DB: wayang_hackathon
+      POSTGRES_USER: wayang
+      POSTGRES_PASSWORD: wayang
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - wayang-postgres-data:/var/lib/postgresql/data
+    ports:
+      # Exposed on the host too, so participants can point a local SQL
+      # client at it if they want (e.g. `psql -h localhost -p 55432`).
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wayang -d wayang_hackathon"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  wayang-maven-cache:
+  wayang-postgres-data:
