@@ -30,6 +30,9 @@
 name: Publish hackathon Docker image
 
 on:
+  push:
+    branches:
+      - hackathon-docker-environment
   workflow_dispatch: {}
 
 env:
