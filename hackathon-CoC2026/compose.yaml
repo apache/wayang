@@ -28,7 +28,7 @@ services:
     # which is slower (see README.md "Timing") but always matches your
     # exact checkout — useful for contributors actively changing the
     # Dockerfile/build itself, not needed for hackathon participants.
-    image: ghcr.io/apache/wayang-hackathon:latest
+    image: ghcr.io/mohit-devlogs/wayang-hackathon:latest
     build:
       context: ..
       dockerfile: hackathon-CoC2026/Dockerfile
