@@ -33,7 +33,7 @@ import java.sql.SQLException;
 /**
  * PostgreSQL implementation for the {@link TableSource}.
  */
-public abstract class JdbcTableSource extends TableSource implements JdbcExecutionOperator {
+public abstract class JdbcTableSource extends TableSource implements JdbcSourceOperator {
 
     /**
      * Creates a new instance.
@@ -55,6 +55,11 @@ public abstract class JdbcTableSource extends TableSource implements JdbcExecuti
 
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
+        return this.getTableName();
+    }
+
+    @Override
+    public String getSourceName() {
         return this.getTableName();
     }
 
@@ -81,7 +86,7 @@ public abstract class JdbcTableSource extends TableSource implements JdbcExecuti
                         .createJdbcConnection()) {
 
                     // Query the table cardinality.
-                    // No trailing ';' — strict parsers (Trino, BigQuery) reject it in executeQuery.
+                    // No trailing ';': strict parsers (Trino, BigQuery) reject it in executeQuery.
                     final String sql = String.format("SELECT count(*) FROM %s", JdbcTableSource.this.getTableName());
                     final ResultSet resultSet = connection.createStatement().executeQuery(sql);
                     if (!resultSet.next()) {

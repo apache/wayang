@@ -39,7 +39,7 @@
     </properties>
 
     <dependencies>
-        <!-- BigQuery JDBC driver — shaded uber jar includes all transitive deps.
+        <!-- BigQuery JDBC driver; shaded uber jar includes all transitive deps.
              Do NOT add google-cloud-bigquery alongside this; the shaded classes
              conflict with the non-shaded ones. -->
         <dependency>

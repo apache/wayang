@@ -16,27 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.wayang.bigquery.mapping;
+package org.apache.wayang.bigquery.operators;
 
-import org.apache.wayang.core.mapping.Mapping;
-
-import java.util.Arrays;
-import java.util.Collection;
+import org.apache.wayang.basic.operators.ParquetSource;
+import org.apache.wayang.jdbc.operators.JdbcParquetSource;
 
 /**
- * Register for the {@link Mapping}s supported for this platform.
+ * BigQuery implementation for Parquet-backed external tables.
  */
-public class Mappings {
+public class BigQueryParquetSource extends JdbcParquetSource implements BigQueryExecutionOperator {
 
-    public static final Collection<Mapping> ALL = Arrays.asList(
-            new FilterMapping(),
-            new GlobalReduceMapping(),
-            new JoinMapping(),
-            new ParquetSourceMapping(),
-            new ProjectionMapping(),
-            new ReduceByMapping(),
-            new SortMapping(),
-            new TableSinkMapping()
-    );
+    public BigQueryParquetSource(String sourceName, String[] projection, String... columnNames) {
+        super(sourceName, projection, columnNames);
+    }
 
+    public BigQueryParquetSource(ParquetSource that) {
+        super(that);
+    }
 }
