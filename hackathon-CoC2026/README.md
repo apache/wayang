@@ -14,10 +14,11 @@ beyond Git and Docker Desktop is required on the host.
 cache takes 30-50+ minutes depending on network speed and machine specs —
 that's just how long compiling Wayang and its dependency tree (including
 Spark) genuinely takes the first time. That is NOT what hackathon
-participants are expected to do. Instead, the image is built and pushed to
-GitHub Container Registry ahead of the event (see `.github/workflows/
-hackathon-image.yml`), with its Maven cache already warmed at build time.
-Participants just pull it:
+participants are expected to do. Instead, a multi-architecture image
+supporting both linux/amd64 and linux/arm64 is built and pushed to
+GitHub Container Registry ahead of the event (see
+`.github/workflows/hackathon-image.yml`), with its Maven cache
+already warmed at build time. Participants just pull the image:
 
 ```bash
 docker compose pull
@@ -166,6 +167,14 @@ psql -h postgres -U wayang -d wayang_hackathon -c "select * from word_counts_see
   confirm `/tmp/wayang-classpath.txt` from `verify.sh` actually contains
   `spark-sql` and `spark-sql-api` jars; if not, re-run the `dependency:
   build-classpath` step and check for Maven resolution errors above it.
+- **`no matching manifest for linux/arm64/v8`** — the published image does
+  not contain an ARM64 variant. Re-publish the image using the
+  multi-architecture workflow above and pull it again with
+  `docker compose pull`.
+- **`tar: ... Function not implemented` on Apple Silicon** — this can occur
+  when an AMD64-only image is forced to run on an ARM64 host through
+  emulation. Do not force `linux/amd64`; use the multi-architecture image
+  so Docker pulls the native ARM64 variant.
 
 ## Resetting everything
 
@@ -180,11 +189,14 @@ fresh.
 ## For maintainers: publishing the image
 
 `.github/workflows/hackathon-image.yml` builds `hackathon-CoC2026/Dockerfile`
-and pushes it to `ghcr.io/apache/wayang-hackathon:latest`. It's manual
-(`workflow_dispatch`), not automatic on every push — trigger it from the
-Actions tab whenever the environment needs to pick up new commits, and
-definitely once shortly before the event so the pushed image reflects
-current `main`.
+natively for both `linux/amd64` and `linux/arm64`, publishes the
+architecture-specific images, and then creates a single multi-architecture
+manifest at `ghcr.io/apache/wayang-hackathon:latest`.
+
+The workflow is manual (`workflow_dispatch`), not automatic on every push —
+trigger it from the Actions tab whenever the environment needs to pick up
+new commits, and definitely once shortly before the event so the pushed
+image reflects the current environment.
 
 This needs GHCR (GitHub Container Registry) enabled for this repository
 under the ASF GitHub org. If the workflow's push step fails with a
