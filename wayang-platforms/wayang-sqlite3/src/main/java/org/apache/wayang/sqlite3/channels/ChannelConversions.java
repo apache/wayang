@@ -18,8 +18,10 @@
 
 package org.apache.wayang.sqlite3.channels;
 
+import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.optimizer.channels.ChannelConversion;
 import org.apache.wayang.core.optimizer.channels.DefaultChannelConversion;
+import org.apache.wayang.core.types.DataSetType;
 import org.apache.wayang.java.channels.StreamChannel;
 import org.apache.wayang.jdbc.operators.SqlToRddOperator;
 import org.apache.wayang.jdbc.operators.SqlToStreamOperator;
@@ -38,13 +40,23 @@ public class ChannelConversions {
     public static final ChannelConversion SQL_TO_STREAM_CONVERSION = new DefaultChannelConversion(
             Sqlite3Platform.getInstance().getSqlQueryChannelDescriptor(),
             StreamChannel.DESCRIPTOR,
-            () -> new SqlToStreamOperator(Sqlite3Platform.getInstance())
+            (channel, conf) -> new SqlToStreamOperator<>(
+                    Sqlite3Platform.getInstance(),
+                    channel != null && channel.getProducerSlot() != null ?
+                            channel.getProducerSlot().getType() :
+                            DataSetType.createDefault(Record.class)
+            )
     );
 
     public static final ChannelConversion SQL_TO_UNCACHED_RDD_CONVERSION = new DefaultChannelConversion(
             Sqlite3Platform.getInstance().getSqlQueryChannelDescriptor(),
             RddChannel.UNCACHED_DESCRIPTOR,
-            () -> new SqlToRddOperator(Sqlite3Platform.getInstance())
+            (channel, conf) -> new SqlToRddOperator<>(
+                    Sqlite3Platform.getInstance(),
+                    channel != null && channel.getProducerSlot() != null ?
+                            channel.getProducerSlot().getType() :
+                            DataSetType.createDefault(Record.class)
+            )
     );
 
     public static final Collection<ChannelConversion> ALL = Arrays.asList(
