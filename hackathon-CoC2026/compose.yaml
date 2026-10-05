@@ -33,6 +33,8 @@ services:
       context: ..
       dockerfile: hackathon-CoC2026/Dockerfile
     container_name: wayang-hackathon
+    security_opt:
+    - seccomp=unconfined
     working_dir: /workspace/wayang
     volumes:
       # Full repo, read-write, so edits made on the host (or inside the
