@@ -17,7 +17,7 @@
 
 url: "https://wayang.apache.org"
 baseurl: ""
-title: "Apache Wayang (incubating) - Documentation"
+title: "Apache Wayang - Documentation"
 permalink: pretty
 collections:
   publications:
