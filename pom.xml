@@ -95,7 +95,7 @@
 
         <scala.version>2.12.17</scala.version>
         <scala.mayor.version>2.12</scala.mayor.version>
-        <spark.version>3.5.7</spark.version>
+        <spark.version>3.5.8</spark.version>
         <antlr.version>4.9.3</antlr.version>
         <parquet.version>1.15.2</parquet.version>
         <sedona.version>1.6.1</sedona.version>
