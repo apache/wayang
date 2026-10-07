@@ -37,7 +37,7 @@
         <DATA_REPO_002>https://kamir.solidcommunity.net/public/ecolytiq-sustainability-profile</DATA_REPO_002>
         <DIST_WAYANG_HOME>${project.basedir}/../wayang-assembly/target/apache-wayang-assembly-0.7.1-incubating-dist/wayang-0.7.1</DIST_WAYANG_HOME>
 
-        <spark.version>3.5.7</spark.version>
+        <spark.version>3.5.8</spark.version>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
 
