@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -81,6 +82,7 @@ import org.apache.wayang.api.sql.calcite.rules.WayangRules;
 import org.apache.wayang.api.sql.calcite.schema.SchemaUtils;
 import org.apache.wayang.api.sql.calcite.utils.ModelParser;
 import org.apache.wayang.api.sql.context.SqlContext;
+import org.apache.wayang.api.sql.context.SqlQueryResult;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.data.Tuple2;
 import org.apache.wayang.core.api.Configuration;
@@ -222,6 +224,23 @@ class SqlToWayangRelTest {
 
         assertTrue(!result.isEmpty());
         assertTrue(result.stream().allMatch(field -> field.getField(1).equals(1)));
+    }
+
+    @Test
+    void executeSqlWithMetadataReturnsRowsAndColumns() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleInt.csv");
+
+        final SqlQueryResult result = sqlContext.executeSqlWithMetadata(
+                "SELECT NAMEA, NAMEB FROM fs.exampleInt"
+        );
+
+        assertTrue(!result.getRows().isEmpty());
+        assertEquals(Arrays.asList("NAMEA", "NAMEB"), result.getColumns().stream()
+                .map(column -> column.getName())
+                .collect(Collectors.toList()));
+        assertEquals("NAMEA", result.getColumns().get(0).getLabel());
+        assertEquals(Types.INTEGER, result.getColumns().get(1).getJdbcType());
+        assertEquals("INTEGER", result.getColumns().get(1).getTypeName());
     }
 
     @Test
@@ -821,6 +840,22 @@ class SqlToWayangRelTest {
 
         final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
                 "SELECT count(*) FROM fs.exampleDelimiter" //
+        );
+
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+        sqlContext.execute(wayangPlan);
+
+        assertEquals(result.size(), 1);
+        assertEquals(result.stream().findFirst().get().getInt(0), 3);
+    }
+
+    @Test
+    void exampleCommaDelimitedUntypedHeader() throws Exception {
+        final SqlContext sqlContext = createSqlContext("/data/exampleCommaUntyped.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT count(*) FROM fs.exampleCommaUntyped" //
         );
 
         final Collection<Record> result = t.field0;

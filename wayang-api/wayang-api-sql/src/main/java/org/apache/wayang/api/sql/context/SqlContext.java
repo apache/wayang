@@ -26,11 +26,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.SubQueryRemoveRule;
+import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.tools.RuleSet;
 import org.apache.calcite.tools.RuleSets;
 
@@ -58,6 +64,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
@@ -182,6 +189,10 @@ public class SqlContext extends WayangContext {
     }
 
     public Collection<Record> executeSql(final String sql) throws SqlParseException {
+        return this.executeSqlWithMetadata(sql).getRows();
+    }
+
+    public SqlQueryResult executeSqlWithMetadata(final String sql) throws SqlParseException {
         final Properties configProperties = Optimizer.ConfigProperties.getDefaults();
         final RelDataTypeFactory relDataTypeFactory = new JavaTypeFactoryImpl();
 
@@ -194,7 +205,68 @@ public class SqlContext extends WayangContext {
 
         PrintUtils.print("After parsing sql query", relNode);
 
-        final RuleSet rules = RuleSets.ofList(
+        final RelNode wayangRel = optimizer.optimize(
+                relNode,
+                relNode.getTraitSet().plus(WayangConvention.INSTANCE),
+                createDefaultRuleSet());
+
+        PrintUtils.print("After translating logical intermediate plan", wayangRel);
+
+        final Collection<Record> collector = new ArrayList<>();
+        final WayangPlan wayangPlan = Optimizer.convertWithConfig(wayangRel, this.getConfiguration(), collector);
+
+        this.execute(getJobName(), wayangPlan);
+
+        return new SqlQueryResult(createColumns(wayangRel.getRowType()), collector);
+    }
+
+    /**
+     * Creates a metadata snapshot from the same Calcite root schema that is
+     * used to validate and execute SQL queries.
+     *
+     * <p>JDBC exposes schemas as single identifiers, whereas Calcite schemas
+     * can be nested. Therefore, this Phase 1 snapshot includes the root
+     * schema's tables and each immediate child schema's direct tables.
+     * Deeper nested schemas are deliberately omitted instead of publishing a
+     * dotted name that JDBC clients would quote as one, incorrect identifier.</p>
+     *
+     * @return configured schemas, tables, and table row types
+     * @throws SQLException if a schema or table cannot expose its metadata
+     */
+    public SqlCatalogMetadata getCatalogMetadata() throws SQLException {
+        try {
+            final SchemaPlus rootSchema = this.calciteSchema.plus();
+            final RelDataTypeFactory typeFactory = new JavaTypeFactoryImpl();
+            final List<SqlSchemaMetadata> schemas = new ArrayList<>();
+
+            if (!rootSchema.getTableNames().isEmpty()) {
+                schemas.add(this.createSchemaMetadata(rootSchema, "", typeFactory));
+            }
+
+            final List<String> schemaNames = new ArrayList<>(rootSchema.getSubSchemaNames());
+            schemaNames.sort(Comparator.naturalOrder());
+            for (final String schemaName : schemaNames) {
+                final SchemaPlus schema = rootSchema.getSubSchema(schemaName);
+                if (schema != null) {
+                    schemas.add(this.createSchemaMetadata(schema, schemaName, typeFactory));
+                }
+            }
+            return new SqlCatalogMetadata(schemas);
+        } catch (final RuntimeException e) {
+            final SQLException sqlException = findSqlException(e);
+            if (sqlException != null) {
+                throw sqlException;
+            }
+            throw new SQLException(
+                    "Could not inspect the configured Calcite catalog.",
+                    "HY000",
+                    e
+            );
+        }
+    }
+
+    private static RuleSet createDefaultRuleSet() {
+        return RuleSets.ofList(
                 SubQueryRemoveRule.Config.FILTER.toRule(),
                 SubQueryRemoveRule.Config.JOIN.toRule(),
                 SubQueryRemoveRule.Config.PROJECT.toRule(),
@@ -206,20 +278,70 @@ public class SqlContext extends WayangContext {
                 WayangRules.WAYANG_JOIN_RULE,
                 WayangRules.WAYANG_AGGREGATE_RULE,
                 WayangRules.WAYANG_SORT_RULE);
+    }
 
-        final RelNode wayangRel = optimizer.optimize(
-                relNode,
-                relNode.getTraitSet().plus(WayangConvention.INSTANCE),
-                rules);
+    private static List<SqlColumn> createColumns(final RelDataType rowType) {
+        final List<SqlColumn> columns = new ArrayList<>(rowType.getFieldCount());
+        for (final RelDataTypeField field : rowType.getFieldList()) {
+            final RelDataType fieldType = field.getType();
+            final SqlTypeName sqlTypeName = fieldType.getSqlTypeName();
+            columns.add(new SqlColumn(
+                    field.getName(),
+                    field.getName(),
+                    sqlTypeName.getName(),
+                    sqlTypeName.getJdbcOrdinal(),
+                    Math.max(0, fieldType.getPrecision()),
+                    Math.max(0, fieldType.getScale()),
+                    fieldType.isNullable()
+            ));
+        }
+        return columns;
+    }
 
-        PrintUtils.print("After translating logical intermediate plan", wayangRel);
+    private SqlSchemaMetadata createSchemaMetadata(
+            final SchemaPlus schema,
+            final String schemaName,
+            final RelDataTypeFactory typeFactory
+    ) throws SQLException {
+        final List<String> tableNames = new ArrayList<>(schema.getTableNames());
+        tableNames.sort(Comparator.naturalOrder());
+        final List<SqlTableMetadata> tables = new ArrayList<>(tableNames.size());
+        try {
+            for (final String tableName : tableNames) {
+                final Table table = schema.getTable(tableName);
+                if (table == null) {
+                    continue;
+                }
+                final Schema.TableType tableType = table.getJdbcTableType();
+                tables.add(new SqlTableMetadata(
+                        tableName,
+                        tableType == null ? Schema.TableType.TABLE.jdbcName : tableType.jdbcName,
+                        createColumns(table.getRowType(typeFactory))
+                ));
+            }
+        } catch (final RuntimeException e) {
+            final SQLException sqlException = findSqlException(e);
+            if (sqlException != null) {
+                throw sqlException;
+            }
+            throw new SQLException(
+                    "Could not inspect Calcite schema '" + schemaName + "'.",
+                    "HY000",
+                    e
+            );
+        }
+        return new SqlSchemaMetadata(schemaName, tables);
+    }
 
-        final Collection<Record> collector = new ArrayList<>();
-        final WayangPlan wayangPlan = Optimizer.convert(wayangRel, collector);
-
-        this.execute(getJobName(), wayangPlan);
-
-        return collector;
+    private static SQLException findSqlException(final Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof SQLException) {
+                return (SQLException) current;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private static String getJobName() {
