@@ -13,24 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-*
-!Dockerfile
-!python/
-python/**
-!python/Dockerfile
-!python/docker/
-!python/docker/**
-!python/examples/
-!python/examples/**
-!python/pyproject.toml
-!python/setup.cfg
-!python/README.md
-!python/src/
-python/src/**
-!python/src/pywy/
-!python/src/pywy/**
-!wayang-assembly/
-wayang-assembly/**
-!wayang-assembly/target/
-wayang-assembly/target/**
-!wayang-assembly/target/*-dist.tar.gz
+.git
+.gitignore
+**/target/
+
+.idea/
+.vscode/
+*.iml
+
+*.log
+
+.DS_Store
+Thumbs.db
+
+.m2/
