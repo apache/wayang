@@ -167,7 +167,7 @@ public class JavaReduceByOperator<Type, KeyType>
                 if (list1.isEmpty()) {
                     return list2;
                 } else if (list2.isEmpty()) {
-                    return list2;
+                    return list1;
                 } else {
                     list1.set(0, this.reduceFunction.apply(list1.get(0), list2.get(0)));
                     return list1;
