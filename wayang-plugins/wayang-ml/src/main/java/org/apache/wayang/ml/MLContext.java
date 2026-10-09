@@ -63,8 +63,8 @@ public class MLContext extends WayangContext {
             final Optional<String> originalOption = config.getOptionalStringProperty("wayang.ml.experience.original");
 
             final OneHotMappings mappings = new OneHotMappings();
-            final TreeEncoder encoder = new TreeEncoder(mappings);
-            final String original = originalOption.orElse(encoder.encode(wayangPlan, wayangJob.getOptimizationContext(), false).toString());
+            final TreeEncoder encoder = new TreeEncoder(mappings, config);
+            final String original = originalOption.orElse(encoder.encode(wayangPlan, wayangJob.getOptimizationContext()).toString());
 
             final Optional<String> choicesOption = config
                     .getOptionalStringProperty("wayang.ml.experience.with-platforms");
