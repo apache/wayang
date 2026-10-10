@@ -291,7 +291,7 @@ public class JdbcExecutor extends ExecutorTemplate {
         try (Statement stmt = jdbcExecutor.connection.createStatement()) {
             // Handle overwrite: drop existing table first
             if ("overwrite".equals(sinkOp.getMode())) {
-                stmt.execute("DROP TABLE IF EXISTS " + sinkOp.getTableName());
+                stmt.execute("DROP TABLE IF EXISTS " + sinkOp.getQuotedTableName(jdbcExecutor.connection));
             }
             // Execute the composed query: CREATE TABLE x AS SELECT ... or INSERT INTO x
             // SELECT ...

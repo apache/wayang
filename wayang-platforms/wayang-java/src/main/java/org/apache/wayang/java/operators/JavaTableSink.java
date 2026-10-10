@@ -21,6 +21,7 @@ package org.apache.wayang.java.operators;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.operators.TableSink;
 import org.apache.wayang.basic.util.DatabaseProduct;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.basic.util.SqlTypeUtils;
 import org.apache.wayang.core.optimizer.OptimizationContext;
 import org.apache.wayang.core.plan.wayangplan.ExecutionOperator;
@@ -158,23 +159,20 @@ public class JavaTableSink<T> extends TableSink<T> implements JavaExecutionOpera
 
         try {
             Class.forName(writeProps.getProperty("driver"));
-            String quote = (product == DatabaseProduct.MYSQL) ? "`"
-                    : (product == DatabaseProduct.MSSQL) ? "[" : "\"";
-            String closingQuote = (product == DatabaseProduct.MSSQL) ? "]" : quote;
-
             try (Connection conn = DriverManager.getConnection(writeProps.getProperty("url"), writeProps)) {
                 conn.setAutoCommit(false);
                 try (Statement stmt = conn.createStatement()) {
+                    String quotedTable = SqlIdentifierUtils.escapeAndQuoteIdentifier(this.getTableName(), conn);
                     if (this.getMode().equals("overwrite")) {
-                        stmt.execute("DROP TABLE IF EXISTS " + quote + this.getTableName() + closingQuote);
+                        stmt.execute("DROP TABLE IF EXISTS " + quotedTable);
                     }
 
                     StringBuilder sb = new StringBuilder();
-                    sb.append("CREATE TABLE IF NOT EXISTS ").append(quote).append(this.getTableName())
-                            .append(closingQuote).append(" (");
+                    sb.append("CREATE TABLE IF NOT EXISTS ").append(quotedTable).append(" (");
                     String separator = "";
                     for (int i = 0; i < finalColumnNames.length; i++) {
-                        sb.append(separator).append(quote).append(finalColumnNames[i]).append(closingQuote).append(" ")
+                        String quotedCol = SqlIdentifierUtils.escapeAndQuoteIdentifier(finalColumnNames[i], conn);
+                        sb.append(separator).append(quotedCol).append(" ")
                                 .append(finalSqlTypes[i]);
                         separator = ", ";
                     }
@@ -182,11 +180,11 @@ public class JavaTableSink<T> extends TableSink<T> implements JavaExecutionOpera
                     stmt.execute(sb.toString());
 
                     sb = new StringBuilder();
-                    sb.append("INSERT INTO ").append(quote).append(this.getTableName()).append(closingQuote)
-                            .append(" (");
+                    sb.append("INSERT INTO ").append(quotedTable).append(" (");
                     separator = "";
                     for (int i = 0; i < finalColumnNames.length; i++) {
-                        sb.append(separator).append(quote).append(finalColumnNames[i]).append(closingQuote);
+                        String quotedCol = SqlIdentifierUtils.escapeAndQuoteIdentifier(finalColumnNames[i], conn);
+                        sb.append(separator).append(quotedCol);
                         separator = ", ";
                     }
                     sb.append(") VALUES (");

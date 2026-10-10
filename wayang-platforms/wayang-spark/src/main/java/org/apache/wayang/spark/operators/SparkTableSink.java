@@ -31,6 +31,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.operators.TableSink;
 import org.apache.wayang.basic.util.DatabaseProduct;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.basic.util.SqlTypeUtils;
 import org.apache.wayang.core.api.exception.WayangException;
 import org.apache.wayang.core.optimizer.OptimizationContext;
@@ -124,15 +125,8 @@ public class SparkTableSink<T> extends TableSink<T> implements SparkExecutionOpe
             writeProps.setProperty("batchSize", "250000");
         }
 
-        String targetTable = this.getTableName();
-        if (targetTable != null && !targetTable.startsWith("(") && !targetTable.startsWith("\"")
-                && !targetTable.startsWith("`")) {
-            DatabaseProduct product = SqlTypeUtils.detectProduct(this.getProperties().getProperty("url"));
-            String quote = (product == DatabaseProduct.MYSQL) ? "`"
-                    : (product == DatabaseProduct.MSSQL) ? "[" : "\"";
-            String closingQuote = (product == DatabaseProduct.MSSQL) ? "]" : quote;
-            targetTable = quote + targetTable + closingQuote;
-        }
+        DatabaseProduct product = SqlTypeUtils.detectProduct(this.getProperties().getProperty("url"));
+        String targetTable = SqlIdentifierUtils.escapeAndQuoteIdentifier(this.getTableName(), product);
 
         df.write()
                 .mode(this.mode)
