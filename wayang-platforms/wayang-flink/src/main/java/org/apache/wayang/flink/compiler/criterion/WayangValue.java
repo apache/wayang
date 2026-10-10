@@ -26,10 +26,9 @@ import org.apache.flink.types.Value;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInput;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
+import org.apache.wayang.basic.operators.ObjectFileSerialization;
 /**
  * Implementation of {@link Value} of flink for use in Wayang
  */
@@ -88,48 +87,31 @@ public class WayangValue<T> implements Value {
         this.data = convertToObject(array);
     }
 
-    public byte[] convertToByte(){
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        ObjectOutput out = null;
-        byte[] result = null;
-        try {
-            out = new ObjectOutputStream(bos);
+    public byte[] convertToByte() {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             ObjectOutputStream out = new ObjectOutputStream(bos)) {
             out.writeObject(this.data);
             out.flush();
-            result = bos.toByteArray();
+            return bos.toByteArray();
         } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            try {
-                bos.close();
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
+            return null;
         }
-        return result;
     }
 
-    public T convertToObject(byte[] array){
-        ByteArrayInputStream bis = new ByteArrayInputStream(array);
-        ObjectInput in = null;
-        T object = null;
-        try {
-            in = new ObjectInputStream(bis);
-            object = (T) in.readObject();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                if (in != null) {
-                    in.close();
-                }
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
+    public T convertToObject(byte[] array) {
+        if (array == null || array.length == 0) {
+            return null;
         }
-        return object;
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(array);
+             ObjectInputStream in = new ObjectInputStream(bis)) {
+            Class<?> targetType = this.data != null ? this.data.getClass() : null;
+            in.setObjectInputFilter(ObjectFileSerialization.createObjectInputFilter(targetType));
+            return (T) in.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     public String toString(){
