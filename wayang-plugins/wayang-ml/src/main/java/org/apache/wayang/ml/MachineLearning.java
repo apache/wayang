@@ -18,6 +18,7 @@
 
 package org.apache.wayang.ml;
 
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -26,6 +27,7 @@ import org.apache.wayang.core.mapping.Mapping;
 import org.apache.wayang.core.optimizer.channels.ChannelConversion;
 import org.apache.wayang.core.platform.Platform;
 import org.apache.wayang.core.plugin.Plugin;
+import org.apache.wayang.core.util.ReflectionUtils;
 import org.apache.wayang.java.platform.JavaPlatform;
 import org.apache.wayang.spark.platform.SparkPlatform;
 
@@ -33,6 +35,8 @@ import org.apache.wayang.spark.platform.SparkPlatform;
  * Provides {@link Plugin}s that enable usage of the xxxx.
  */
 public class MachineLearning {
+
+    private static final String DEFAULT_CONFIG_FILE = "wayang-ml-defaults.properties";
 
     /**
      * Enables use with the {@link JavaPlatform} and {@link SparkPlatform}.
@@ -56,6 +60,10 @@ public class MachineLearning {
 
         @Override
         public void setProperties(final Configuration configuration) {
+            final InputStream is = ReflectionUtils.loadResource(DEFAULT_CONFIG_FILE);
+            if (is != null) {
+                configuration.load(is);
+            }
         }
     };
 
