@@ -67,6 +67,72 @@ public class ObjectFileSerializationTest {
         Assert.assertEquals(42, deserialized.value);
     }
 
+    @Test(expected = java.io.InvalidClassException.class)
+    public void legacyDeserializationRejectsDisallowedClass() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean disallowed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{disallowed};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // Deserializing with an unrelated elementType (or null) should be rejected by the filter
+        ObjectFileSerialization.deserializeChunk(
+                bytes,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                String.class);
+    }
+
+    @Test
+    public void legacyDeserializationAllowedViaElementType() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean payload = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{payload};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // When elementType explicitly specifies AtomicBoolean, it should be permitted
+        List<Object> result = ObjectFileSerialization.deserializeChunk(
+                bytes,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                java.util.concurrent.atomic.AtomicBoolean.class);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertTrue(((java.util.concurrent.atomic.AtomicBoolean) result.get(0)).get());
+    }
+
+    @Test
+    public void legacyDeserializationAllowedViaSystemProperty() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean payload = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{payload};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        String propKey = "wayang.basic.serialization.allowlist";
+        String originalVal = System.getProperty(propKey);
+        try {
+            System.setProperty(propKey, "java.util.concurrent.atomic.**");
+            List<Object> result = ObjectFileSerialization.deserializeChunk(
+                    bytes,
+                    ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                    String.class);
+            Assert.assertEquals(1, result.size());
+            Assert.assertTrue(((java.util.concurrent.atomic.AtomicBoolean) result.get(0)).get());
+        } finally {
+            if (originalVal != null) {
+                System.setProperty(propKey, originalVal);
+            } else {
+                System.clearProperty(propKey);
+            }
+        }
+    }
+
     private static class SerializablePayload implements Serializable {
         final String text;
         final int value;
