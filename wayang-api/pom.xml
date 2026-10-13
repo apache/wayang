@@ -40,6 +40,7 @@
         <module>wayang-api-sql</module>
         <module>wayang-api-json</module>
         <module>wayang-api-utils</module>
+        <module>wayang-api-jdbc</module>
     </modules>
 
 </project>
