@@ -19,6 +19,7 @@
 package org.apache.wayang.basic.operators;
 
 import org.apache.wayang.basic.data.Record;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.core.plan.wayangplan.UnarySink;
 import org.apache.wayang.core.types.DataSetType;
 
@@ -51,6 +52,8 @@ public class TableSink<T> extends UnarySink<T> {
 
     public TableSink(Properties props, String mode, String tableName, String[] columnNames, DataSetType<T> type) {
         super(type);
+        SqlIdentifierUtils.validateTableName(tableName);
+        SqlIdentifierUtils.validateColumnNames(columnNames);
         this.tableName = tableName;
         this.columnNames = columnNames == null ? null : java.util.Arrays.copyOf(columnNames, columnNames.length);
         this.props = new Properties();
@@ -78,6 +81,7 @@ public class TableSink<T> extends UnarySink<T> {
     }
 
     protected void setColumnNames(String[] columnNames) {
+        SqlIdentifierUtils.validateColumnNames(columnNames);
         this.columnNames = columnNames == null ? null : java.util.Arrays.copyOf(columnNames, columnNames.length);
     }
 

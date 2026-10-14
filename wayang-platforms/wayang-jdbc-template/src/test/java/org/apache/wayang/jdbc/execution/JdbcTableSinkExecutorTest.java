@@ -46,6 +46,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -282,7 +283,7 @@ class JdbcTableSinkExecutorTest {
         JdbcTableSinkOperator sinkOp = new HsqldbTableSinkOperator(
                 "my_table", new String[]{"col1"});
         sinkOp.setMode("overwrite");
-        assertEquals("CREATE TABLE my_table AS (", sinkOp.createSqlClause(null, null));
+        assertEquals("CREATE TABLE \"my_table\" AS (", sinkOp.createSqlClause(null, null));
     }
 
     @Test
@@ -290,6 +291,43 @@ class JdbcTableSinkExecutorTest {
         JdbcTableSinkOperator sinkOp = new HsqldbTableSinkOperator(
                 "my_table", new String[]{"col1"});
         sinkOp.setMode("append");
-        assertEquals("INSERT INTO my_table", sinkOp.createSqlClause(null, null));
+        assertEquals("INSERT INTO \"my_table\"", sinkOp.createSqlClause(null, null));
+    }
+
+    @Test
+    void testMultipartTableNameQuotedClauseGeneration() {
+        JdbcTableSinkOperator sinkOp = new HsqldbTableSinkOperator(
+                "public.my_table", new String[]{"col1"});
+        sinkOp.setMode("overwrite");
+        assertEquals("CREATE TABLE \"public\".\"my_table\" AS (", sinkOp.createSqlClause(null, null));
+    }
+
+    @Test
+    void testInvalidTableNameThrowsException() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("target; DROP TABLE users; --", new String[]{"col1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("target\"table", new String[]{"col1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("target table", new String[]{"col1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("123table", new String[]{"col1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("", new String[]{"col1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator(null, new String[]{"col1"}));
+    }
+
+    @Test
+    void testInvalidColumnNamesThrowsException() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("my_table", new String[]{"col; DROP TABLE users; --"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("my_table", new String[]{"col 1"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("my_table", new String[]{"col\"name"}));
+        assertThrows(IllegalArgumentException.class, () ->
+                new HsqldbTableSinkOperator("my_table", new String[]{""}));
+    }
 }
-}
+

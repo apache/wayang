@@ -20,6 +20,7 @@ package org.apache.wayang.jdbc.operators;
 
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.operators.TableSink;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimator;
 import org.apache.wayang.core.platform.ChannelDescriptor;
@@ -47,13 +48,24 @@ public abstract class JdbcTableSinkOperator extends TableSink<Record> implements
         super(that);
     }
 
+    /**
+     * Returns the escaped and quoted table name appropriate for the given database connection.
+     *
+     * @param connection database connection, or {@code null} for standard ANSI quoting
+     * @return escaped and quoted table name
+     */
+    public String getQuotedTableName(Connection connection) {
+        return SqlIdentifierUtils.escapeAndQuoteIdentifier(this.getTableName(), connection);
+    }
+
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
         String mode = this.getMode();
+        String targetTable = this.getQuotedTableName(connection);
         if ("overwrite".equals(mode)) {
-            return "CREATE TABLE " + this.getTableName() + " AS";
+            return "CREATE TABLE " + targetTable + " AS";
         }
-        return "INSERT INTO " + this.getTableName();
+        return "INSERT INTO " + targetTable;
     }
 
     /**

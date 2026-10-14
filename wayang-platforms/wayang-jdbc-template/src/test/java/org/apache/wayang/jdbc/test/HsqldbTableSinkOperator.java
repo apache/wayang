@@ -43,10 +43,11 @@ public class HsqldbTableSinkOperator extends JdbcTableSinkOperator {
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
         String mode = this.getMode();
+        String targetTable = this.getQuotedTableName(connection);
         if ("overwrite".equals(mode)) {
-            return "CREATE TABLE " + this.getTableName() + " AS (";
+            return "CREATE TABLE " + targetTable + " AS (";
         }
-        return "INSERT INTO " + this.getTableName();
+        return "INSERT INTO " + targetTable;
     }
 
     @Override
