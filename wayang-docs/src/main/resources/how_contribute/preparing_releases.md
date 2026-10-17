@@ -148,7 +148,7 @@ What the plugin now does, is automatically execute the following operations:
 
 However, this just prepared the git repository for the release, we have to perform the release to produce and stage the release artifacts.
 
-Please verify the git repository at: `https://gitbox.apache.org/repos/asf?p=incubator-wayang.git` is in the correct state. Please select the release branch and verify the commit log. It is important that the commit with the message "[maven-release-plugin] prepare release `v{release-version}`" is tagged with the release tag (in this case `v0.6.0`)
+Please verify the git repository at: `https://gitbox.apache.org/repos/asf?p=wayang.git` is in the correct state. Please select the release branch and verify the commit log. It is important that the commit with the message "[maven-release-plugin] prepare release `v{release-version}`" is tagged with the release tag (in this case `v0.6.0`)
 
 # What if something goes wrong?
 

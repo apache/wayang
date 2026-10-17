@@ -30,6 +30,6 @@ menus:
 
 # Documentation Changes
 
-To propose a change to _release_ documentation (that is, docs that appear on [Wayang documentation](https://wayang.apache.org/documentation/)), edit the Markdown source files in the repository  [incubator-wayang/wayang-docs](https://github.com/apache/incubator-wayang/tree/main/wayang-docs), the documentation is write usign jekyll, because of this reason maybe you will found some weird code in the markdown files. The process to propose a doc change is otherwise the same as the process for proposing [code changes](code_changes/preparing_contribute_code_changes/).
+To propose a change to _release_ documentation (that is, docs that appear on [Wayang documentation](https://wayang.apache.org/documentation/)), edit the Markdown source files in the repository  [wayang/wayang-docs](https://github.com/apache/wayang/tree/main/wayang-docs), the documentation is write usign jekyll, because of this reason maybe you will found some weird code in the markdown files. The process to propose a doc change is otherwise the same as the process for proposing [code changes](code_changes/preparing_contribute_code_changes/).
 
 If you want to make bigger contribution, please send a email to `dev@wayang.apache.org`, to give you more information how to do it.

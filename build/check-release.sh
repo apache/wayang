@@ -18,8 +18,8 @@
 
 RC=rc8
 VERSION=0.6.0
-URL=https://dist.apache.org/repos/dist/dev/incubator/wayang
-NAME=apache-wayang-${VERSION}-incubating
+URL=https://dist.apache.org/repos/dist/dev/wayang
+NAME=apache-wayang-${VERSION}
 NAME_SRC_BASE=${NAME}-source-release
 NAME_SRC_EXT=${NAME_SRC_BASE}.zip
 

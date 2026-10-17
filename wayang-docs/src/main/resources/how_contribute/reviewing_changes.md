@@ -29,6 +29,6 @@ menus:
 
 # Reviewing Changes
 
-Changes to Wayang source code are proposed, reviewed and committed via [GitHub pull request](https://github.com/apache/incubator-wayang/pulls) ([described here 🔗 ](code_changes/preparing_contribute_code_changes/pull_request.md)). Anyone can view and comment on active changes here. Reviewing others’ changes is a good way to learn how the change process works and gain exposure to activity in various parts of the code. You can help by reviewing the changes and asking questions or pointing out issues – as simple as typos or small issues of style.
+Changes to Wayang source code are proposed, reviewed and committed via [GitHub pull request](https://github.com/apache/wayang/pulls) ([described here 🔗 ](code_changes/preparing_contribute_code_changes/pull_request.md)). Anyone can view and comment on active changes here. Reviewing others’ changes is a good way to learn how the change process works and gain exposure to activity in various parts of the code. You can help by reviewing the changes and asking questions or pointing out issues – as simple as typos or small issues of style.
 
 

@@ -19,8 +19,8 @@
 RC=rc9
 RC_NEW=rc10
 VERSION=0.6.0
-URL=https://dist.apache.org/repos/dist/dev/incubator/wayang
-NAME=apache-wayang-${VERSION}-incubating
+URL=https://dist.apache.org/repos/dist/dev/wayang
+NAME=apache-wayang-${VERSION}
 NAME_SRC_BASE=${NAME}-source-release
 NAME_SRC_EXT=${NAME_SRC_BASE}.zip
 # TODO: validate the enviroment before to execute
@@ -57,6 +57,6 @@ cp target/checkout/target/${NAME_SRC_EXT}.sha512 ${RC_NEW}/
 cp target/checkout/RELEASE_NOTES ${RC_NEW}/
 cp target/checkout/README.md ${RC_NEW}/
 
-svn import -m "Apache Wayang (incubating) ${RC_NEW}" ${RC_NEW} ${URL}/${VERSION}/${RC_NEW} --username bertty
+svn import -m "Apache Wayang ${RC_NEW}" ${RC_NEW} ${URL}/${VERSION}/${RC_NEW} --username bertty
 
 
