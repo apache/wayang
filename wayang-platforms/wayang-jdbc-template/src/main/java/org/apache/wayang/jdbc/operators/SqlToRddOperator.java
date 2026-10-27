@@ -37,29 +37,42 @@ import org.apache.wayang.core.util.json.WayangJsonObj;
 import org.apache.wayang.jdbc.channels.SqlQueryChannel;
 import org.apache.wayang.jdbc.execution.DatabaseDescriptor;
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
+import org.apache.wayang.basic.data.Tuple2;
+import org.apache.wayang.basic.operators.JoinOperator;
 import org.apache.wayang.spark.channels.RddChannel;
 import org.apache.wayang.spark.execution.SparkExecutor;
 import org.apache.wayang.spark.operators.SparkExecutionOperator;
 
+import java.sql.Connection;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlToRddOperator extends UnaryToUnaryOperator<Record, Record> implements SparkExecutionOperator, JsonSerializable {
+public class SqlToRddOperator<Type> extends UnaryToUnaryOperator<Type, Type> implements SparkExecutionOperator, JsonSerializable {
 
     private final JdbcPlatformTemplate jdbcPlatform;
 
+    @SuppressWarnings("unchecked")
     public SqlToRddOperator(JdbcPlatformTemplate jdbcPlatform) {
-        this(jdbcPlatform, DataSetType.createDefault(Record.class));
+        this(jdbcPlatform, (DataSetType<Type>) DataSetType.createDefault(Record.class));
     }
 
-    public SqlToRddOperator(JdbcPlatformTemplate jdbcPlatform, DataSetType<Record> dataSetType) {
-        super(dataSetType, dataSetType, false);
+    @SuppressWarnings("unchecked")
+    public SqlToRddOperator(JdbcPlatformTemplate jdbcPlatform, DataSetType<?> dataSetType) {
+        super((DataSetType<Type>) dataSetType, (DataSetType<Type>) dataSetType, false);
         this.jdbcPlatform = jdbcPlatform;
     }
 
-    protected SqlToRddOperator(SqlToRddOperator that) {
+    @SuppressWarnings("unchecked")
+    public void adaptType(DataSetType<?> newType) {
+        if (newType != null) {
+            this.inputSlots[0] = new org.apache.wayang.core.plan.wayangplan.InputSlot<>("in", this, (DataSetType<Type>) newType);
+            this.outputSlots[0] = new org.apache.wayang.core.plan.wayangplan.OutputSlot<>("out", this, (DataSetType<Type>) newType);
+        }
+    }
+
+    protected SqlToRddOperator(SqlToRddOperator<Type> that) {
         super(that);
         this.jdbcPlatform = that.jdbcPlatform;
     }
@@ -133,10 +146,31 @@ public class SqlToRddOperator extends UnaryToUnaryOperator<Record, Record> imple
 
         Dataset<Row> df = reader.load();
 
-        // Convert the distributed DataFrame to JavaRDD<Record> lazily on executors
-        JavaRDD<Record> resultSetRDD = df.toJavaRDD().map(SqlToRddOperator::rowToRecord);
+        boolean isTuple = false;
+        if (this.getOutputType() != null && Tuple2.class.isAssignableFrom(this.getOutputType().getDataUnitType().getTypeClass())) {
+            isTuple = true;
+        } else if (input.getChannel() != null) {
+            if (input.getChannel().getProducerSlot() != null &&
+                    Tuple2.class.isAssignableFrom(input.getChannel().getProducerSlot().getType().getDataUnitType().getTypeClass())) {
+                isTuple = true;
+            } else if (input.getChannel().getProducer() != null &&
+                    input.getChannel().getProducer().getOperator() instanceof JoinOperator) {
+                isTuple = true;
+            }
+        }
 
-        output.accept(resultSetRDD, executor);
+        if (isTuple) {
+            int leftColumnCount = -1;
+            try (Connection conn = databaseDescriptor.createJdbcConnection()) {
+                leftColumnCount = SqlToStreamOperator.resolveLeftColumnCount(conn, input);
+            } catch (Exception ignored) {}
+            final int finalLeftColumnCount = leftColumnCount;
+            JavaRDD<Tuple2<Record, Record>> resultSetRDD = df.toJavaRDD().map(row -> rowToTuple2(row, finalLeftColumnCount));
+            output.accept((JavaRDD) resultSetRDD, executor);
+        } else {
+            JavaRDD<Record> resultSetRDD = df.toJavaRDD().map(SqlToRddOperator::rowToRecord);
+            output.accept((JavaRDD) resultSetRDD, executor);
+        }
 
         ExecutionLineageNode queryLineageNode = new ExecutionLineageNode(operatorContext);
         queryLineageNode.add(LoadProfileEstimators.createFromSpecification(
@@ -161,6 +195,23 @@ public class SqlToRddOperator extends UnaryToUnaryOperator<Record, Record> imple
             fields[i] = row.get(i);
         }
         return new Record(fields);
+    }
+
+    public static Tuple2<Record, Record> rowToTuple2(Row row, int leftColumnCount) {
+        int total = row.size();
+        if (leftColumnCount <= 0 || leftColumnCount >= total) {
+            leftColumnCount = total / 2;
+        }
+        Object[] leftFields = new Object[leftColumnCount];
+        for (int i = 0; i < leftColumnCount; i++) {
+            leftFields[i] = row.get(i);
+        }
+        int rightColumnCount = total - leftColumnCount;
+        Object[] rightFields = new Object[rightColumnCount];
+        for (int i = 0; i < rightColumnCount; i++) {
+            rightFields[i] = row.get(leftColumnCount + i);
+        }
+        return new Tuple2<>(new Record(leftFields), new Record(rightFields));
     }
 
     private static String cleanQuery(String query) {
@@ -196,7 +247,7 @@ public class SqlToRddOperator extends UnaryToUnaryOperator<Record, Record> imple
         return new WayangJsonObj().put("platform", this.jdbcPlatform.getClass().getCanonicalName());
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings("rawtypes")
     public static SqlToRddOperator fromJson(WayangJsonObj wayangJsonObj) {
         final String platformClassName = wayangJsonObj.getString("platform");
         JdbcPlatformTemplate jdbcPlatform = ReflectionUtils.evaluate(platformClassName + ".getInstance()");
