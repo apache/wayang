@@ -76,7 +76,7 @@ public class JavaTableSink<T> extends TableSink<T> implements JavaExecutionOpera
     }
 
     public JavaTableSink(Properties props, String mode, String tableName) {
-        this(props, mode, tableName, null);
+        this(props, mode, tableName, (String[]) null);
     }
 
     public JavaTableSink(Properties props, String mode, String tableName, String... columnNames) {
