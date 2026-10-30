@@ -22,6 +22,7 @@ import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.types.RecordType;
 import org.apache.wayang.core.plan.wayangplan.UnarySource;
 import org.apache.wayang.core.types.DataSetType;
+import org.apache.wayang.core.types.DataUnitType;
 
 /**
  * {@link UnarySource} that provides the tuples from a database table.
@@ -30,16 +31,31 @@ public class TableSource extends UnarySource<Record> {
 
     private final String tableName;
 
+    /**
+     * Columns this source reads. Empty when the caller did not name any columns.
+     */
+    private final String[] columnNames;
+
     public String getTableName() {
         return tableName;
+    }
+
+    /**
+     * @return a copy of the column names, or an empty array when none were given
+     */
+    public String[] getColumnNames() {
+        if (this.columnNames == null) {
+            return new String[0];
+        }
+        return this.columnNames.clone();
     }
 
     /**
      * Creates a new instance.
      *
      * @param tableName   name of the table to be read
-     * @param columnNames names of the columns in the tables; can be omitted but allows to inject schema information
-     *                    into Wayang, so as to allow specific optimizations
+     * @param columnNames names of the columns to read; can be omitted. When they are plain SQL identifiers,
+     *                    JDBC scans select these columns instead of {@code *}
      */
     public TableSource(String tableName, String... columnNames) {
         this(tableName, createOutputDataSetType(columnNames));
@@ -48,6 +64,22 @@ public class TableSource extends UnarySource<Record> {
     public TableSource(String tableName, DataSetType<Record> type) {
         super(type);
         this.tableName = tableName;
+        this.columnNames = columnNamesFrom(type);
+    }
+
+    private static String[] columnNamesFrom(DataSetType<Record> type) {
+        if (type == null) {
+            return new String[0];
+        }
+        final DataUnitType<Record> dataUnitType = type.getDataUnitType();
+        if (!(dataUnitType instanceof RecordType)) {
+            return new String[0];
+        }
+        final String[] names = ((RecordType) dataUnitType).getFieldNames();
+        if (names == null || names.length == 0) {
+            return new String[0];
+        }
+        return names.clone();
     }
 
     /**
@@ -71,6 +103,7 @@ public class TableSource extends UnarySource<Record> {
     public TableSource(TableSource that) {
         super(that);
         this.tableName = that.getTableName();
+        this.columnNames = that.getColumnNames();
     }
 
 }

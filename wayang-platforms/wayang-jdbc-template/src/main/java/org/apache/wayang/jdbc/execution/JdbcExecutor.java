@@ -34,6 +34,7 @@ import org.apache.wayang.basic.operators.JoinOperator;
 import org.apache.wayang.basic.operators.SpatialFilterOperator;
 import org.apache.wayang.basic.operators.SpatialJoinOperator;
 import org.apache.wayang.basic.operators.TableSource;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.core.api.Job;
 import org.apache.wayang.core.api.exception.WayangException;
 import org.apache.wayang.core.optimizer.OptimizationContext;
@@ -92,7 +93,7 @@ public class JdbcExecutor extends ExecutorTemplate {
                     jdbcExecutor.functionCompiler
                 );
             } else {
-                selectClause = "*";
+                selectClause = selectClauseFor(tableOp);
             }
 
         final StringBuilder sb = new StringBuilder(1000);
@@ -121,6 +122,29 @@ public class JdbcExecutor extends ExecutorTemplate {
         // single-statement JDBC executeQuery and is rejected by strict SQL parsers
         // such as Trino and BigQuery. Postgres/SQLite/HSQLDB accept its absence.
         return sb;
+    }
+
+    /**
+     * Columns declared on the table source become the {@code SELECT} list.
+     * {@link JdbcTableSource#createSqlClause} stays the table name, because it is placed after {@code FROM}.
+     * Names that are not plain identifiers (for example {@code ST_AsText(geom)}) are schema hints, so the
+     * clause stays {@code *}.
+     */
+    private static String selectClauseFor(JdbcTableSource tableOp) {
+        final String[] columnNames = tableOp.getColumnNames();
+        if (columnNames.length == 0 || !arePlainIdentifiers(columnNames)) {
+            return "*";
+        }
+        return String.join(", ", columnNames);
+    }
+
+    private static boolean arePlainIdentifiers(String[] columnNames) {
+        try {
+            SqlIdentifierUtils.validateColumnNames(columnNames);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     /**
