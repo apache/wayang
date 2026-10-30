@@ -25,14 +25,26 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Currency;
+import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Utility methods that convert between Java objects and the on-disk representation used by {@link ObjectFileSink}.
@@ -88,7 +100,7 @@ public final class ObjectFileSerialization {
             case JSON:
                 return deserializeJson(payload, elementType);
             case LEGACY_JAVA_SERIALIZATION:
-                return deserializeLegacy(payload);
+                return deserializeLegacy(payload, elementType);
             default:
                 throw new IllegalArgumentException("Unknown serialization mode: " + mode);
         }
@@ -104,9 +116,10 @@ public final class ObjectFileSerialization {
         }
     }
 
-    private static List<Object> deserializeLegacy(byte[] payload) throws IOException, ClassNotFoundException {
+    private static List<Object> deserializeLegacy(byte[] payload, Class<?> elementType) throws IOException, ClassNotFoundException {
         try (ByteArrayInputStream bis = new ByteArrayInputStream(payload);
              ObjectInputStream ois = new ObjectInputStream(bis)) {
+            ois.setObjectInputFilter(createObjectInputFilter(elementType));
             Object tmp = ois.readObject();
             if (tmp == null) {
                 return Collections.emptyList();
@@ -119,6 +132,182 @@ public final class ObjectFileSerialization {
             }
             return new ArrayList<>(Collections.singletonList(tmp));
         }
+    }
+
+    /**
+     * Creates an {@link ObjectInputFilter} allowlist for legacy Java deserialization.
+     *
+     * @param elementType the expected element type (optional, may be {@code null})
+     * @return an {@link ObjectInputFilter} that permits only expected and safe classes
+     */
+    public static ObjectInputFilter createObjectInputFilter(Class<?> elementType) {
+        ObjectInputFilter filter = filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            if (isAllowedClass(clazz, elementType)) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
+
+        ObjectInputFilter globalFilter = ObjectInputFilter.Config.getSerialFilter();
+        if (globalFilter != null) {
+            return ObjectInputFilter.merge(globalFilter, filter);
+        }
+        return filter;
+    }
+
+    private static boolean isAllowedClass(Class<?> clazz, Class<?> elementType) {
+        Class<?> current = clazz;
+        while (current.isArray()) {
+            current = current.getComponentType();
+        }
+        if (current.isPrimitive()) {
+            return true;
+        }
+
+        // Standard base object and scalar types
+        if (current == Object.class ||
+                current == String.class ||
+                current == Boolean.class ||
+                current == Character.class ||
+                current == Class.class ||
+                isStandardNumber(current) ||
+                Enum.class.isAssignableFrom(current) ||
+                isStandardCharSequence(current)) {
+            return true;
+        }
+
+        // Standard math
+        if (current.getName().startsWith("java.math.")) {
+            return true;
+        }
+
+        // Standard date and time types
+        if (current.getName().startsWith("java.time.") ||
+                (Date.class.isAssignableFrom(current) &&
+                        (current.getName().startsWith("java.util.") || current.getName().startsWith("java.sql.")))) {
+            return true;
+        }
+
+        // Standard collections, maps, and common utilities
+        if (((Collection.class.isAssignableFrom(current) ||
+                Map.class.isAssignableFrom(current) ||
+                Map.Entry.class.isAssignableFrom(current)) &&
+                current.getName().startsWith("java.util.")) ||
+                current.getName().equals("java.util.CollSer") ||
+                current.getName().startsWith("java.util.Collections$") ||
+                current.getName().startsWith("java.util.Arrays$") ||
+                current.getName().startsWith("java.util.ImmutableCollections$") ||
+                current == UUID.class ||
+                current == BitSet.class ||
+                current == Locale.class ||
+                current == Currency.class ||
+                current == Optional.class) {
+            return true;
+        }
+
+        // Wayang internal types (excluding custom Number, Collection, and Map subclasses)
+        if (current.getName().startsWith("org.apache.wayang.") &&
+                !Number.class.isAssignableFrom(current) &&
+                !Collection.class.isAssignableFrom(current) &&
+                !Map.class.isAssignableFrom(current)) {
+            return true;
+        }
+
+        // Scala tuples and basic collections (for Spark / Scala platform compatibility)
+        if (current.getName().startsWith("scala.Tuple") ||
+                current.getName().startsWith("scala.collection.")) {
+            return true;
+        }
+
+        // Expected element type if specified
+        if (elementType != null && !isBroadType(elementType)) {
+            Class<?> targetComponent = elementType;
+            while (targetComponent.isArray()) {
+                targetComponent = targetComponent.getComponentType();
+            }
+            if (!isBroadType(targetComponent) &&
+                    !Number.class.isAssignableFrom(targetComponent) &&
+                    !Collection.class.isAssignableFrom(targetComponent) &&
+                    !Map.class.isAssignableFrom(targetComponent)) {
+                if (current.equals(targetComponent) || current.getName().startsWith(targetComponent.getName() + "$")) {
+                    return true;
+                }
+            }
+        }
+
+        // Configurable system property allowlist (comma/semicolon-separated patterns)
+        String configuredAllowlist = System.getProperty("wayang.basic.serialization.allowlist",
+                System.getProperty("wayang.serialization.allowlist"));
+        if (configuredAllowlist != null && !configuredAllowlist.trim().isEmpty()) {
+            String[] patterns = configuredAllowlist.split("[,;]");
+            for (String pattern : patterns) {
+                if (matchesPattern(pattern.trim(), current.getName())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isStandardNumber(Class<?> clazz) {
+        return clazz == Number.class ||
+                clazz == Byte.class ||
+                clazz == Short.class ||
+                clazz == Integer.class ||
+                clazz == Long.class ||
+                clazz == Float.class ||
+                clazz == Double.class;
+    }
+
+    private static boolean isStandardCharSequence(Class<?> clazz) {
+        return clazz == String.class ||
+                clazz == StringBuilder.class ||
+                clazz == StringBuffer.class ||
+                clazz == CharSequence.class;
+    }
+
+    private static boolean isBroadType(Class<?> clazz) {
+        return clazz == Object.class ||
+                clazz == Serializable.class ||
+                clazz == Comparable.class ||
+                clazz == Cloneable.class ||
+                clazz == Number.class ||
+                clazz == CharSequence.class ||
+                clazz == Collection.class ||
+                clazz == List.class ||
+                clazz == Set.class ||
+                clazz == Queue.class ||
+                clazz == Map.class ||
+                clazz == Map.Entry.class ||
+                clazz == Iterable.class ||
+                clazz == Iterator.class;
+    }
+
+    private static boolean matchesPattern(String pattern, String className) {
+        if (pattern.isEmpty()) {
+            return false;
+        }
+        if (pattern.equals("*") || pattern.equals("**")) {
+            return true;
+        }
+        if (pattern.endsWith(".**")) {
+            String prefix = pattern.substring(0, pattern.length() - 3);
+            return className.equals(prefix) || className.startsWith(prefix + ".");
+        }
+        if (pattern.endsWith(".*")) {
+            String prefix = pattern.substring(0, pattern.length() - 2);
+            if (className.startsWith(prefix + ".")) {
+                String remainder = className.substring(prefix.length() + 1);
+                return !remainder.contains(".");
+            }
+            return false;
+        }
+        return pattern.equals(className);
     }
 
     private static byte[] serializeJson(Object[] chunk, int validLength) throws IOException {
