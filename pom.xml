@@ -116,7 +116,7 @@
         <guava.version>33.7.1-jre</guava.version>
         <hamcrest.version>2.2</hamcrest.version>
         <jackson.version>2.15.4</jackson.version>
-        <jacoco.version>0.8.9</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <jodatime.version>2.10.6</jodatime.version>
         <jsonpath.version>2.4.0</jsonpath.version>
         <junit5.version>5.14.4</junit5.version>
@@ -339,7 +339,7 @@
                         <plugin>
                             <groupId>net.alchim31.maven</groupId>
                             <artifactId>scala-maven-plugin</artifactId>
-                            <version>4.9.5</version>
+                            <version>4.10.0</version>
                             <executions>
                                 <execution>
                                     <id>compile-scala</id>
@@ -990,7 +990,13 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>build-helper-maven-plugin</artifactId>
-                    <version>3.1.0</version>
+                    <version>3.6.2</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>3.6.4</version>
                 </plugin>
 
                 <plugin>
@@ -1111,7 +1117,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>license-maven-plugin</artifactId>
-                <version>2.0.0</version>
+                <version>2.7.1</version>
                 <executions>
                     <execution>
                         <id>license-check</id>
@@ -1280,7 +1286,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.9</version>
+                <version>${jacoco.version}</version>
                 <executions>
                     <execution>
                         <id>coverage-initialize</id>

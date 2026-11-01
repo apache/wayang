@@ -48,7 +48,6 @@
         <commons-io.version>2.15.1</commons-io.version>
         <hamcrest.version>2.2</hamcrest.version>
         <jackson.version>2.15.4</jackson.version>
-        <jacoco.version>0.8.9</jacoco.version>
         <jodatime.version>2.10.6</jodatime.version>
         <jsonpath.version>2.4.0</jsonpath.version>
         <junit5.version>5.12.2</junit5.version>
