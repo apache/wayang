@@ -187,7 +187,7 @@ class TrinoOperatorsIT {
 
         assertEquals(120000, queryLong("SELECT count(*) FROM " + SINK_TABLE),
                 "TableSource should return all orders");
-        assertSqlReachedTrino("SELECT * FROM " + ORDERS);
+        assertSqlReachedTrino("SELECT order_id, customer_id, region, amount FROM " + ORDERS);
     }
 
     /** Filter: WHERE region = 'AMER' pushed to Trino. */

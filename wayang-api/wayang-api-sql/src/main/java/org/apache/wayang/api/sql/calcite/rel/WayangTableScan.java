@@ -28,11 +28,14 @@ import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.schema.Table;
 import org.apache.wayang.api.sql.calcite.convention.WayangConvention;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class WayangTableScan extends TableScan implements WayangRel {
 
-    //TODO: fields are never queried, why?
+    /**
+     * Ordinals of the columns this scan reads. Defaults to every column of the table.
+     */
     private final int[] fields;
 
     public WayangTableScan(RelOptCluster cluster,
@@ -94,7 +97,19 @@ public class WayangTableScan extends TableScan implements WayangRel {
             : table.getQualifiedName().get(1);
     }
 
+    /**
+     * @return the columns selected by {@link #fields}, in that order
+     */
     public List<String> getColumnNames() {
-        return table.getRowType().getFieldNames();
+        final List<String> names = table.getRowType().getFieldNames();
+        final List<String> projected = new ArrayList<>(this.fields.length);
+        for (int field : this.fields) {
+            projected.add(names.get(field));
+        }
+        return projected;
+    }
+
+    public int[] getFields() {
+        return this.fields.clone();
     }
 }
