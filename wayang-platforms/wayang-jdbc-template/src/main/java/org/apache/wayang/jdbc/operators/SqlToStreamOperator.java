@@ -27,6 +27,8 @@ import org.apache.wayang.core.plan.wayangplan.Operator;
 import org.apache.wayang.core.plan.wayangplan.UnaryToUnaryOperator;
 import org.apache.wayang.core.platform.ChannelDescriptor;
 import org.apache.wayang.core.platform.ChannelInstance;
+import org.apache.wayang.core.platform.CrossPlatformExecutor;
+import org.apache.wayang.core.platform.ExecutionResourceTemplate;
 import org.apache.wayang.core.platform.lineage.ExecutionLineageNode;
 import org.apache.wayang.core.types.DataSetType;
 import org.apache.wayang.core.util.JsonSerializable;
@@ -97,30 +99,50 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
         final StreamChannel.Instance output = (StreamChannel.Instance) outputs[0];
 
         JdbcPlatformTemplate producerPlatform = (JdbcPlatformTemplate) input.getChannel().getProducer().getPlatform();
+        final String sqlQuery = input.getSqlQuery();
         final Connection connection = producerPlatform
                 .createDatabaseDescriptor(executor.getConfiguration())
                 .createJdbcConnection();
 
-        Iterator<Record> resultSetIterator = new ResultSetIterator(connection, input.getSqlQuery());
-        Spliterator<Record> resultSetSpliterator = Spliterators.spliteratorUnknownSize(resultSetIterator, 0);
-        Stream<Record> resultSetStream = StreamSupport.stream(resultSetSpliterator, false);
+        ResultSetIterator resultSetIterator = new ResultSetIterator(connection, sqlQuery);
+        boolean success = false;
+        try {
+            Spliterator<Record> resultSetSpliterator = Spliterators.spliteratorUnknownSize(resultSetIterator, 0);
+            Stream<Record> resultSetStream = StreamSupport.stream(resultSetSpliterator, false)
+                    .onClose(resultSetIterator::close);
 
-        output.accept(resultSetStream);
+            // Terminal stream operations do not close streams. Keep a job-level fallback for
+            // short-circuiting consumers, without changing StreamChannel's ownership semantics.
+            CrossPlatformExecutor crossPlatformExecutor = executor.getCrossPlatformExecutor();
+            if (crossPlatformExecutor != null) {
+                crossPlatformExecutor.registerGlobal(new ExecutionResourceTemplate(null) {
+                    @Override
+                    protected void doDispose() {
+                        resultSetIterator.close();
+                    }
+                });
+            }
+            output.accept(resultSetStream);
 
-        ExecutionLineageNode queryLineageNode = new ExecutionLineageNode(operatorContext);
-        queryLineageNode.add(LoadProfileEstimators.createFromSpecification(
-                String.format("wayang.%s.sqltostream.load.query", this.jdbcPlatform.getPlatformId()),
-                        executor.getConfiguration()
-                ));
-        queryLineageNode.addPredecessor(input.getLineage());
-        ExecutionLineageNode outputLineageNode = new ExecutionLineageNode(operatorContext);
-        outputLineageNode.add(LoadProfileEstimators.createFromSpecification(
-                String.format("wayang.%s.sqltostream.load.output", this.jdbcPlatform.getPlatformId()),
-                executor.getConfiguration()
-        ));
-        output.getLineage().addPredecessor(outputLineageNode);
+            ExecutionLineageNode queryLineageNode = new ExecutionLineageNode(operatorContext);
+            queryLineageNode.add(LoadProfileEstimators.createFromSpecification(
+                    String.format("wayang.%s.sqltostream.load.query", this.jdbcPlatform.getPlatformId()),
+                            executor.getConfiguration()
+                    ));
+            queryLineageNode.addPredecessor(input.getLineage());
+            ExecutionLineageNode outputLineageNode = new ExecutionLineageNode(operatorContext);
+            outputLineageNode.add(LoadProfileEstimators.createFromSpecification(
+                    String.format("wayang.%s.sqltostream.load.output", this.jdbcPlatform.getPlatformId()),
+                    executor.getConfiguration()
+            ));
+            output.getLineage().addPredecessor(outputLineageNode);
 
-        return queryLineageNode.collectAndMark();
+            Tuple<Collection<ExecutionLineageNode>, Collection<ChannelInstance>> result = queryLineageNode.collectAndMark();
+            success = true;
+            return result;
+        } finally {
+            if (!success) resultSetIterator.close();
+        }
     }
 
     @Override
@@ -146,6 +168,10 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
      */
     public static class ResultSetIterator implements Iterator<Record>, AutoCloseable {
 
+        private Connection connection;
+
+        private Statement statement;
+
         /**
          * Keeps around the {@link ResultSet} of the SQL query.
          */
@@ -159,26 +185,33 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
         /**
          * Creates a new instance.
          *
-         * @param connection the JDBC connection on which to execute a SQL query
+         * @param connection the JDBC connection on which to execute a SQL query; ownership is transferred
+         *                   to this iterator, including when construction fails
          * @param sqlQuery   the SQL query
          */
         ResultSetIterator(Connection connection, String sqlQuery) {
+            this.connection = connection;
+            boolean success = false;
             try {
                 //connection.setAutoCommit(false);
                 Statement st = connection.createStatement();
+                this.statement = st;
                 //st.setFetchSize(100000000);
                 this.resultSet = st.executeQuery(sqlQuery);
+                this.moveToNext();
+                success = true;
             } catch (SQLException e) {
-                this.close();
                 throw new WayangException("Could not execute SQL.", e);
+            } finally {
+                if (!success) this.close();
             }
-            this.moveToNext();
         }
 
         /**
          * Moves this instance to the next {@link Record}.
          */
         private void moveToNext() {
+            boolean success = false;
             try {
                 if (this.resultSet == null || !this.resultSet.next()) {
                     this.next = null;
@@ -191,10 +224,11 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
                     }
                     this.next = new Record(values);
                 }
+                success = true;
             } catch (SQLException e) {
-                this.next = null;
-                this.close();
                 throw new WayangException("Exception while iterating the result set.", e);
+            } finally {
+                if (!success) this.close();
             }
         }
 
@@ -212,13 +246,17 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
 
         @Override
         public void close() {
-            if (this.resultSet != null) {
+            AutoCloseable[] resources = {this.resultSet, this.statement, this.connection};
+            this.resultSet = null;
+            this.statement = null;
+            this.connection = null;
+            this.next = null;
+            for (AutoCloseable resource : resources) {
+                if (resource == null) continue;
                 try {
-                    this.resultSet.close();
-                } catch (Throwable t) {
-                    LogManager.getLogger(this.getClass()).error("Could not close result set.", t);
-                } finally {
-                    this.resultSet = null;
+                    resource.close();
+                } catch (Exception e) {
+                    LogManager.getLogger(this.getClass()).error("Could not close JDBC resource.", e);
                 }
             }
         }
