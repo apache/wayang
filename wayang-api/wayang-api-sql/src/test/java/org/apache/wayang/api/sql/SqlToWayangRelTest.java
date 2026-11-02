@@ -243,6 +243,23 @@ class SqlToWayangRelTest {
     }
 
     @Test
+    void javaFilterWithCastIntColumnToVarchar() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleInt.csv");
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT * FROM fs.exampleInt WHERE CAST(NAMEB AS VARCHAR) = '1'");
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        PlanTraversal.upstream().traverse(wayangPlan.getSinks()).getTraversedNodes()
+                .forEach(node -> node.addTargetPlatform(Java.platform()));
+
+        sqlContext.execute(wayangPlan);
+
+        assertTrue(!result.isEmpty());
+        assertTrue(result.stream().allMatch(field -> field.getField(1).equals(1)));
+    }
+
+    @Test
     void sqlApiSourceTest() throws Exception {
         final JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl();
         final RexBuilder rexBuilder = new RexBuilder(typeFactory);
