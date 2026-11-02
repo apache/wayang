@@ -60,7 +60,10 @@ class JSONSerializer:
         if hasattr(operator, "output_type") and operator.output_type is not None:
             json_operator["data"]["outputType"] = ndim_from_type(operator.output_type).to_json()
 
-        if operator.json_name == "filter":
+        if operator.json_name == "inputCollection":
+            json_operator["data"]["values"] = operator.values
+
+        elif operator.json_name == "filter":
             json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(operator.use_predicate)).decode('utf-8')
 
         elif operator.json_name == "reduceBy":

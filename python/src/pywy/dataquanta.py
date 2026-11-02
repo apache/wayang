@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 
-from typing import Set, List, Optional, cast
+from typing import Set, List, Optional, Tuple, Union, cast
 
 from pywy.core.core import Plugin, PywyPlan
 from pywy.operators.base import PO_T
@@ -55,6 +55,21 @@ class WayangContext:
 
     def textfile(self, file_path: str) -> "DataQuanta[str]":
         return DataQuanta(self, TextFileSource(file_path))
+
+    def load_collection(self, collection: Union[List[T], Tuple[T, ...]]) -> "DataQuanta[T]":
+        """Create a source from a snapshot of an ordered list or tuple.
+
+        Values may be strings, booleans, signed 64-bit integers, finite floats,
+        or nested lists/tuples (tuples become lists). Empty collections are valid.
+        Other values, including None, mappings, sets, and cyclic containers,
+        raise TypeError or ValueError before a plan is submitted.
+
+        As with other sources, the current Python worker passes records to UDFs
+        as strings. Numeric UDFs must convert their input explicitly with int()
+        or float(). See the README for a fused transformation example and
+        existing worker limitations.
+        """
+        return DataQuanta(self, CollectionSource(collection))
 
     def parquet(
         self, file_path: str, projection: Optional[List[str]] = None, column_names: Optional[List[str]] = None
