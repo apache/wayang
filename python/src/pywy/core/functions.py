@@ -14,6 +14,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+import json
+
+from pywy.execution.util import JsonRecord
+from pywy.operators.source import CollectionSource
+
+
 class ChainedFunctions:
     def __init__(self):
         self.functions = []
@@ -27,3 +33,17 @@ class ChainedFunctions:
         for function in self.functions:
             result = function(result)
         return result
+
+    def execute_json(self, input_data):
+        # Encode before the worker's legacy str()/NumPy conversion loses types.
+        try:
+            for value in self.execute(input_data):
+                value = CollectionSource._snapshot(value, set(), "collect result")
+                yield JsonRecord(
+                    json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
+                )
+        except Exception as error:
+            # Preserve the Python cause instead of exposing only a socket EOF.
+            yield JsonRecord(
+                json.dumps({"error": f"{type(error).__name__}: {error}"}).encode("utf-8")
+            )

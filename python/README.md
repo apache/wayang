@@ -164,6 +164,38 @@ request, so this source is intended for small local datasets.
 This API requires a backend supporting literal `inputCollection.data.values`.
 The backend continues to accept existing `inputCollection.data.udf` plans.
 
+### Collecting results
+
+Use `collect()` to execute a pipeline and receive a Python list:
+
+```python
+result = (ctx.load_collection([1, 2, 3])
+          .map(lambda value: int(value) * 2, str, int)
+          .collect())
+# [2, 4, 6]
+```
+
+Empty results return `[]`. Supported result values are the same as collection
+inputs: strings, booleans, signed 64-bit integers, finite floats, and nested
+lists/tuples (tuples become lists). Unsupported values cause an error instead
+of being converted to strings. Each call executes the pipeline again without
+changing the graph. Result order depends on the operators and platform.
+
+Adjacent Python transformations at the end of a collected pipeline run together
+and encode their results before crossing the worker boundary. This preserves
+their runtime types, including nested values, and supports standalone maps and
+filters. Inputs to those transformations still follow the existing string-based
+worker behavior: filtering `[1, 2, 3]` with `lambda x: int(x) > 1` yields
+`["2", "3"]`. Map with `int` before filtering to retain numeric results in the
+fused pipeline. Earlier worker boundaries, for example before a join, retain
+their existing limitations; collecting cannot restore types already lost there.
+
+The backend, Python client, and worker must all include collect support.
+Execution failures raise `requests.HTTPError` with the backend error response;
+invalid or unsupported responses raise `ValueError`. Results are materialized
+in backend and client memory, so use this method for results that fit in memory.
+`store_textfile()` and legacy REST responses retain their existing behavior.
+
 ## Docker
 
 The Python API can be run with the Wayang REST API as a separate container.

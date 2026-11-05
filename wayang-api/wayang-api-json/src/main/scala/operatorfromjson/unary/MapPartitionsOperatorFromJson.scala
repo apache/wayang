@@ -33,5 +33,6 @@ case class MapPartitionsOperatorFromJson(override val id: Long,
 }
 
 object MapPartitionsOperatorFromJson {
-  case class Data(udf: String, val inputType: scala.Option[NDimArray], val outputType: scala.Option[NDimArray])
+  case class Data(udf: String, val inputType: scala.Option[NDimArray], val outputType: scala.Option[NDimArray],
+                  jsonOutput: Boolean = false)
 }

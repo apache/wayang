@@ -234,6 +234,18 @@ class DataQuanta(GenericTco):
 
 
 
+    def collect(self: "DataQuanta[T]") -> List[T]:
+        """Execute this pipeline and return its results in memory.
+
+        Supports the same values as load_collection(); tuples become lists.
+        Result order depends on the operators and execution platform. Each call
+        executes the pipeline again. Backend failures raise requests.HTTPError;
+        invalid or unsupported results raise ValueError.
+        """
+        return PywyPlan(
+            self.context.plugins, self.context.configuration, [self.operator]
+        ).execute(collect=True)
+
     def store_textfile(self: "DataQuanta[In]", path: str, input_type: GenericTco = None) -> None:
         last: List[SinkOperator] = [
             cast(

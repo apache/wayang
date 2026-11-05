@@ -48,7 +48,9 @@ class JSONSerializer:
             json_operator["input"] = []
 
         if operator.cat != "output":
-            json_operator["output"] = list(map(lambda x: self.id_table[x], operator.outputOperator))
+            json_operator["output"] = [
+                self.id_table[output] for output in operator.outputOperator if output in self.id_table
+            ]
         else:
             json_operator["output"] = []
 
@@ -96,7 +98,7 @@ class JSONSerializer:
 
         return json_operator
 
-    def serialize_pipeline(self, pipeline):
+    def serialize_pipeline(self, pipeline, json_output=False):
         assert len(pipeline) > 0
 
         json_operator = {}
@@ -105,9 +107,11 @@ class JSONSerializer:
         json_operator["cat"] = "unary"
         json_operator["data"] = {}
         json_operator["input"] = list(map(lambda x: self.id_table[x], pipeline[0].inputOperator))
-        json_operator["output"] = list(map(lambda x: self.id_table[x], pipeline[-1].outputOperator))
+        json_operator["output"] = [
+            self.id_table[output] for output in pipeline[-1].outputOperator if output in self.id_table
+        ]
 
-        if len(pipeline) == 1:
+        if len(pipeline) == 1 and not json_output:
             return self.serialize(pipeline[0])
 
         chainedUdfs = ChainedFunctions()
@@ -117,6 +121,9 @@ class JSONSerializer:
             if hasattr(operator, "get_udf"):
                 chainedUdfs.add_function(operator.get_udf)
 
-        json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(chainedUdfs.execute)).decode('utf-8')
+        udf = chainedUdfs.execute_json if json_output else chainedUdfs.execute
+        json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(udf)).decode('utf-8')
+        if json_output:
+            json_operator["data"]["jsonOutput"] = True
 
         return json_operator

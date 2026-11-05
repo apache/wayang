@@ -25,6 +25,7 @@ import java.io.{StringWriter, PrintWriter}
 import org.apache.wayang.api.json.builder.JsonPlanBuilder
 import org.apache.wayang.api.json.operatorfromdrawflow.OperatorFromDrawflowConverter
 import org.apache.wayang.api.json.operatorfromjson.OperatorFromJson
+import org.apache.wayang.api.json.operatorfromjson.unary.MapPartitionsOperatorFromJson
 import org.apache.wayang.api.json.parserutil.ParseOperatorsFromDrawflow
 import org.apache.wayang.api.json.parserutil.ParsePlanFromJson
 
@@ -51,17 +52,30 @@ object Main extends ZIOAppDefault {
      (for {
         requestBody <- req.body.asString
         planFromJson <- ZIO.fromTry(Try(ParsePlanFromJson.parsePlanFromString(requestBody).get))
-        result <- ZIO.attempt(new JsonPlanBuilder().fromPlan(planFromJson).execute())
-        responseBody <- ZIO.attempt {
-          if (planFromJson.operators.exists(op => op.cat == OperatorFromJson.Categories.Output)) {
-            println("Successfully executed WayangJob")
-            "Success"
-          } else {
-            result.collect().toString()
+        _ <- ZIO.attempt {
+          if (planFromJson.collect) {
+            require(!planFromJson.operators.exists(_.cat == OperatorFromJson.Categories.Output),
+              "Collect plans cannot contain output sinks")
+            require(planFromJson.operators.count(_.output.isEmpty) == 1,
+              "Collect plans require exactly one terminal operator")
           }
         }
-        resBody <- ZIO.succeed(Response.text(responseBody))
-     } yield resBody).catchAll(t => {
+        result <- ZIO.attempt(new JsonPlanBuilder().fromPlan(planFromJson).execute())
+        responseBody <- ZIO.attempt {
+          if (planFromJson.collect) {
+            val jsonOutput = planFromJson.operators.exists {
+              case op: MapPartitionsOperatorFromJson => op.output.isEmpty && op.data.jsonOutput
+              case _ => false
+            }
+            Response.json(CollectResult.response(result.collect(), jsonOutput))
+          } else if (planFromJson.operators.exists(op => op.cat == OperatorFromJson.Categories.Output)) {
+            println("Successfully executed WayangJob")
+            Response.text("Success")
+          } else {
+            Response.text(result.collect().toString())
+          }
+        }
+     } yield responseBody).catchAll(t => {
       // Error messages printed in server
       t.printStackTrace
 

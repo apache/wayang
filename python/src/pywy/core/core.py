@@ -24,7 +24,7 @@ from pywy.core.platform import Platform
 from pywy.core.serializer import JSONSerializer
 from pywy.graph.graph import WayangGraph
 from pywy.graph.types import WGraphOfVec
-from pywy.operators import SinkOperator, UnaryToUnaryOperator
+from pywy.operators import PywyOperator, CollectionSource, UnaryToUnaryOperator
 
 
 class Plugin:
@@ -64,13 +64,13 @@ class PywyPlan:
     plugins : :obj:`set` of :py:class:`pywy.core.plugin.Plugin`
         plugins is the set of possible platforms that can be uses to execute
         the PywyPlan
-    sinks : :py:class:`typing.Iterable` of :py:class:`pywy.operators.sink.SinkOperator`
-        The list of sink operators, this describe the end of the pipeline, and
-        they are used to build the `graph`
+    sinks : :py:class:`typing.Iterable` of :py:class:`pywy.operators.base.PywyOperator`
+        Terminal operators used to build the graph. For collect(), the terminal
+        operator need not be a sink.
     """
     graph: WayangGraph
 
-    def __init__(self, plugins: Set[Plugin], configuration: Configuration, sinks: Iterable[SinkOperator]):
+    def __init__(self, plugins: Set[Plugin], configuration: Configuration, sinks: Iterable[PywyOperator]):
         """basic Constructor of PywyPlan
 
         this constructor set the plugins and sinks element, and it prepares
@@ -93,7 +93,7 @@ class PywyPlan:
         """
         self.graph = WGraphOfVec(self.sinks)
 
-    def execute(self):
+    def execute(self, collect: bool = False):
         """ Transform the plan into topologies to group pipelines into one
         MapPartition operator
         Transform the plan into json objects to send it to Wayang
@@ -109,6 +109,8 @@ class PywyPlan:
 
         json_data["context"] = context
         json_data["operators"] = []
+        if collect:
+            json_data["collect"] = True
 
         nodes = []
         pipeline = []
@@ -126,6 +128,9 @@ class PywyPlan:
 
                 json_data["operators"].append(serializer.serialize(operator))
                 pipeline = []
+
+        if pipeline:
+            json_data["operators"].append(serializer.serialize_pipeline(pipeline, json_output=collect))
 
         api_url = self.configuration.get_property("wayang.api.python.url") or os.environ.get("WAYANG_API_URL")
         if api_url is None:
@@ -145,3 +150,21 @@ class PywyPlan:
         json_body = json.dumps(json_data)
         print(json_body)
         response = requests.post(api_url, headers=headers, json=json_data)
+        if collect:
+            if not response.ok:
+                raise requests.HTTPError(
+                    f"Wayang execution failed (HTTP {response.status_code}): {response.text}",
+                    response=response
+                )
+            try:
+                body = response.json()
+            except ValueError as error:
+                raise ValueError(
+                    "Wayang collect expected a JSON response; check the backend version"
+                ) from error
+            if not isinstance(body, dict) or not isinstance(body.get("results"), list):
+                raise ValueError("Wayang collect expected a JSON object with a results array")
+            try:
+                return CollectionSource._snapshot(body["results"], set(), "results")
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"Unsupported Wayang collect response: {error}") from error
