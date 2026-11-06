@@ -105,7 +105,7 @@ public class DefaultEstimatableCost implements EstimatableCost {
         costEstimateWithoutOverheadCache = operatorCosts.plus(junctionCosts).plus(loopCosts);
         ProbabilisticDoubleInterval overheadCosts = plan.getUtilizedPlatforms().stream()
                 .map(platform -> {
-                    Configuration configuraiton = plan.getOptimizationContext().getConfiguration();
+                    Configuration configuration = plan.getOptimizationContext().getConfiguration();
                     long startUpTime = configuraiton.getPlatformStartUpTimeProvider().provideFor(platform);
                     TimeToCostConverter timeToCostConverter = configuraiton.getTimeToCostConverterProvider().provideFor(platform);
                     return timeToCostConverter.convert(new TimeEstimate(startUpTime, startUpTime, 1d));
