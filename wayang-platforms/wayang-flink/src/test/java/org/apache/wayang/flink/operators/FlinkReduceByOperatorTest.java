@@ -42,11 +42,6 @@ import static org.junit.jupiter.api.Assertions.fail;
  */
 class FlinkReduceByOperatorTest extends FlinkOperatorTestBase {
 
-    //TODO: Validate FlinkReduceByOperator implementation
-    // it is required to validate the implementation of FlinkReduceByOperator
-    // because trigger an exception in the test and looks like is a problem in the
-    // implementation of the implementation in the operator
-    // labels:flink,bug
     @Test
     void testExecution() throws Exception {
         // Prepare test data.
