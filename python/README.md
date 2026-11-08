@@ -229,7 +229,8 @@ You can run the python tests by using pytest, the requirements for the tests are
 The collection unit tests run without a backend:
 
 ```bash
-PYTHONPATH=python/src pytest -q python/src/pywy/tests/test_load_collection.py
+PYTHONPATH=python/src pytest -q python/src/pywy/tests/test_load_collection.py \
+  python/src/pywy/tests/test_collect.py
 ```
 
 For the collection integration tests, build and install the JSON API and its
@@ -251,7 +252,14 @@ on the same machine (the tests read its output files):
 ```bash
 PYTHONPATH=python/src \
 PYWAYANG_INTEGRATION_URL=http://localhost:8080/wayang-api-json/submit-plan/json \
-pytest -q python/src/pywy/tests/test_load_collection_integration.py
+pytest -q python/src/pywy/tests/test_load_collection_integration.py \
+  python/src/pywy/tests/test_collect_integration.py
 ```
 
 Without `PYWAYANG_INTEGRATION_URL`, these integration tests explicitly skip.
+The collect tests cover typed results, repeated execution, backend failures,
+and compatibility with text sinks and legacy REST clients. Set
+`PYWAYANG_TEST_SPARK=1` to also exercise collection on local Spark; the backend
+must be configured to run Spark with the JVM options required by JDK 17.
+The [wayang-submit launcher](../bin/wayang-submit) supplies these options. When
+starting the backend with Maven, pass its `--add-opens` options in `MAVEN_OPTS`.

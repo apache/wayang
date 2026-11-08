@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 
-from typing import Set, Iterable
+from typing import Set, Dict
 import json
 import base64
 import cloudpickle
@@ -28,14 +28,19 @@ from pywy.core.functions import ChainedFunctions
 from pywy.graph.graph import WayangGraph
 from pywy.graph.types import WGraphOfVec, NodeOperator, NodeVec
 from pywy.types import get_java_type, NDimArray, ndim_from_type
-from pywy.operators import SinkOperator, UnaryToUnaryOperator, SourceUnaryOperator
+from pywy.operators import PywyOperator, SinkOperator, UnaryToUnaryOperator, SourceUnaryOperator
 
 
 class JSONSerializer:
-    id_table: Iterable[int]
+    id_table: Dict[PywyOperator, int]
 
-    def __init__(self, id_table: Iterable[int]):
+    def __init__(self, id_table: Dict[PywyOperator, int]):
         self.id_table = id_table
+        # Forward links retain only the latest consumer, so derive edges from this plan's inputs.
+        self.consumers = {operator: [] for operator in id_table}
+        for operator in id_table:
+            for upstream in operator.inputOperator:
+                self.consumers[upstream].append(operator)
 
     def serialize(self, operator):
         json_operator = {}
@@ -49,7 +54,7 @@ class JSONSerializer:
 
         if operator.cat != "output":
             json_operator["output"] = [
-                self.id_table[output] for output in operator.outputOperator if output in self.id_table
+                self.id_table[output] for output in self.consumers[operator]
             ]
         else:
             json_operator["output"] = []
@@ -108,7 +113,7 @@ class JSONSerializer:
         json_operator["data"] = {}
         json_operator["input"] = list(map(lambda x: self.id_table[x], pipeline[0].inputOperator))
         json_operator["output"] = [
-            self.id_table[output] for output in pipeline[-1].outputOperator if output in self.id_table
+            self.id_table[output] for output in self.consumers[pipeline[-1]]
         ]
 
         if len(pipeline) == 1 and not json_output:
