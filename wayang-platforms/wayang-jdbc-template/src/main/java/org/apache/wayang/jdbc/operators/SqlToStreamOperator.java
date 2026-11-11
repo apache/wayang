@@ -111,8 +111,10 @@ public class SqlToStreamOperator extends UnaryToUnaryOperator<Record, Record> im
             Stream<Record> resultSetStream = StreamSupport.stream(resultSetSpliterator, false)
                     .onClose(resultSetIterator::close);
 
-            // Terminal stream operations do not close streams. Keep a job-level fallback for
-            // short-circuiting consumers, without changing StreamChannel's ownership semantics.
+            // Terminal operations do not close streams, and StreamChannel disposal only drops its reference.
+            // Register cleanup for job shutdown: live channels can keep the JavaExecutor referenced after
+            // downstream failures, so executor disposal alone is insufficient. Closing on channel disposal
+            // could instead interrupt a lazy successor that still needs the JDBC resources.
             CrossPlatformExecutor crossPlatformExecutor = executor.getCrossPlatformExecutor();
             if (crossPlatformExecutor != null) {
                 crossPlatformExecutor.registerGlobal(new ExecutionResourceTemplate(null) {

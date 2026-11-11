@@ -356,6 +356,42 @@ class SqlToStreamOperatorTest extends OperatorTestBase {
         jdbc.verifyClosed();
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void testJobShutdownClosesStreamWithLiveChannel(boolean downstreamFails) throws SQLException {
+        JdbcResources jdbc = new JdbcResources();
+        JavaExecutor executor = createJavaExecutor();
+        CrossPlatformExecutor crossPlatformExecutor = executor.getCrossPlatformExecutor();
+        crossPlatformExecutor.registerGlobal(executor);
+        StreamChannel.Instance output = jdbc.evaluate(executor);
+        // An unfinished task or lazy successor can still hold its input channel at job shutdown.
+        output.noteObtainedReference();
+        try {
+            Stream<Record> stream = output.provideStream();
+            if (downstreamFails) {
+                IllegalStateException failure = new IllegalStateException("downstream");
+                assertSame(failure, assertThrows(IllegalStateException.class,
+                        () -> stream.forEach(record -> {
+                            throw failure;
+                        })));
+                doThrow(new SQLException("close result set")).when(jdbc.resultSet).close();
+            } else {
+                assertEquals(new Record(1), stream.findFirst().get());
+            }
+            jdbc.verifyOpen();
+
+            crossPlatformExecutor.shutdown();
+
+            // Releasing the job's reference alone cannot dispose an executor with live channels.
+            assertFalse(executor.isDisposed());
+            assertTrue(executor.getNumReferences() > 0);
+            jdbc.verifyClosed();
+        } finally {
+            output.noteDiscardedReference(true);
+        }
+        jdbc.verifyClosed();
+    }
+
     @Test
     void testPublishingFailureClosesResources() throws SQLException {
         JdbcResources jdbc = new JdbcResources();
