@@ -19,6 +19,7 @@
 package org.apache.wayang.jdbc.operators;
 
 import org.apache.wayang.basic.operators.TableSource;
+import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.plan.wayangplan.ExecutionOperator;
 import org.apache.wayang.core.platform.ChannelDescriptor;
 import org.apache.wayang.jdbc.compiler.FunctionCompiler;
@@ -41,6 +42,13 @@ public interface JdbcExecutionOperator extends ExecutionOperator {
      * @return the SQL clause
      */
     String createSqlClause(Connection connection, FunctionCompiler compiler);
+
+    /**
+     * Creates a SQL clause under the given configuration.
+     */
+    default String createSqlClause(Connection connection, FunctionCompiler compiler, Configuration configuration) {
+        return this.createSqlClause(connection, compiler);
+    }
 
     @Override
     JdbcPlatformTemplate getPlatform();
