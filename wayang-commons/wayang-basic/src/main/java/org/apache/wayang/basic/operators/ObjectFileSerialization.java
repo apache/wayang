@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InvalidClassException;
 import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -46,10 +47,34 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 
+import org.apache.wayang.core.api.Configuration;
+
 /**
  * Utility methods that convert between Java objects and the on-disk representation used by {@link ObjectFileSink}.
  */
 public final class ObjectFileSerialization {
+
+    public static final String ALLOWLIST_PROPERTY = "wayang.basic.serialization.allowlist";
+    public static final String LEGACY_ALLOWLIST_PROPERTY = "wayang.serialization.allowlist";
+    public static final String FLINK_ALLOWLIST_PROPERTY = "wayang.flink.serialization.allowlist";
+
+    public static final String EXPECTED_TYPE_PROPERTY = "wayang.basic.serialization.expected-type";
+    public static final String LEGACY_EXPECTED_TYPE_PROPERTY = "wayang.serialization.expected-type";
+    public static final String FLINK_EXPECTED_TYPE_PROPERTY = "wayang.flink.value.expected-type";
+
+    public static final String MAX_DEPTH_PROPERTY = "wayang.basic.serialization.max-depth";
+    public static final String LEGACY_MAX_DEPTH_PROPERTY = "wayang.serialization.max-depth";
+    public static final String MAX_ARRAY_LENGTH_PROPERTY = "wayang.basic.serialization.max-array-length";
+    public static final String LEGACY_MAX_ARRAY_LENGTH_PROPERTY = "wayang.serialization.max-array-length";
+    public static final String MAX_REFERENCES_PROPERTY = "wayang.basic.serialization.max-references";
+    public static final String LEGACY_MAX_REFERENCES_PROPERTY = "wayang.serialization.max-references";
+    public static final String MAX_BYTES_PROPERTY = "wayang.basic.serialization.max-bytes";
+    public static final String LEGACY_MAX_BYTES_PROPERTY = "wayang.serialization.max-bytes";
+
+    static final long DEFAULT_MAX_DEPTH = 100L;
+    static final long DEFAULT_MAX_ARRAY_LENGTH = 1_048_576L;
+    static final long DEFAULT_MAX_REFERENCES = 100_000L;
+    static final long DEFAULT_MAX_BYTES = 67_108_864L;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -117,6 +142,10 @@ public final class ObjectFileSerialization {
     }
 
     private static List<Object> deserializeLegacy(byte[] payload, Class<?> elementType) throws IOException, ClassNotFoundException {
+        long maxBytes = getMaxBytes();
+        if (payload != null && payload.length > maxBytes) {
+            throw new InvalidClassException("Serialized payload length " + payload.length + " exceeds max bytes limit " + maxBytes);
+        }
         try (ByteArrayInputStream bis = new ByteArrayInputStream(payload);
              ObjectInputStream ois = new ObjectInputStream(bis)) {
             ois.setObjectInputFilter(createObjectInputFilter(elementType));
@@ -135,13 +164,26 @@ public final class ObjectFileSerialization {
     }
 
     /**
-     * Creates an {@link ObjectInputFilter} allowlist for legacy Java deserialization.
+     * Creates an {@link ObjectInputFilter} enforcing resource limits and class allowlists for legacy Java deserialization.
      *
      * @param elementType the expected element type (optional, may be {@code null})
-     * @return an {@link ObjectInputFilter} that permits only expected and safe classes
+     * @return an {@link ObjectInputFilter} that permits only expected, safe classes within configured resource bounds
      */
     public static ObjectInputFilter createObjectInputFilter(Class<?> elementType) {
+        final long maxDepth = getMaxDepth();
+        final long maxArrayLength = getMaxArrayLength();
+        final long maxReferences = getMaxReferences();
+        final long maxBytes = getMaxBytes();
+
         ObjectInputFilter filter = filterInfo -> {
+            // Check stream/graph resource bounds before serialClass() since limit callbacks may pass serialClass == null.
+            if (filterInfo.depth() > maxDepth ||
+                    filterInfo.arrayLength() > maxArrayLength ||
+                    filterInfo.references() > maxReferences ||
+                    filterInfo.streamBytes() > maxBytes) {
+                return ObjectInputFilter.Status.REJECTED;
+            }
+
             Class<?> clazz = filterInfo.serialClass();
             if (clazz == null) {
                 return ObjectInputFilter.Status.UNDECIDED;
@@ -248,18 +290,112 @@ public final class ObjectFileSerialization {
             }
         }
 
-        // Configurable system property allowlist (comma/semicolon-separated patterns)
-        String configuredAllowlist = System.getProperty("wayang.basic.serialization.allowlist",
-                System.getProperty("wayang.serialization.allowlist"));
-        if (configuredAllowlist != null && !configuredAllowlist.trim().isEmpty()) {
-            String[] patterns = configuredAllowlist.split("[,;]");
-            for (String pattern : patterns) {
-                if (matchesPattern(pattern.trim(), current.getName())) {
-                    return true;
+        // Trusted configuration allowlist (comma/semicolon-separated patterns via system property or Wayang Configuration)
+        String basicAllowlist = resolveConfigProperty(ALLOWLIST_PROPERTY, LEGACY_ALLOWLIST_PROPERTY);
+        if (matchesAllowlistPatterns(basicAllowlist, current.getName())) {
+            return true;
+        }
+        String flinkAllowlist = resolveConfigProperty(FLINK_ALLOWLIST_PROPERTY);
+        return matchesAllowlistPatterns(flinkAllowlist, current.getName());
+    }
+
+    /**
+     * Resolves the first non-blank value among {@code keys}, checking JVM system properties before Wayang's
+     * default {@link Configuration}.
+     *
+     * @param keys ordered property keys from highest to lowest precedence
+     * @return trimmed property value, or {@code null} if unset or blank
+     */
+    public static String resolveConfigProperty(String... keys) {
+        if (keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (key == null) {
+                continue;
+            }
+            String sysValue = System.getProperty(key);
+            if (sysValue != null && !sysValue.trim().isEmpty()) {
+                return sysValue.trim();
+            }
+        }
+        Configuration defaultConfig = Configuration.getDefaultConfiguration();
+        if (defaultConfig != null) {
+            for (String key : keys) {
+                if (key == null) {
+                    continue;
+                }
+                Optional<String> configValue = defaultConfig.getOptionalStringProperty(key);
+                if (configValue.isPresent() && !configValue.get().trim().isEmpty()) {
+                    return configValue.get().trim();
                 }
             }
         }
+        return null;
+    }
 
+    /**
+     * Returns the configured maximum object graph nesting depth for legacy Java deserialization.
+     *
+     * @return positive depth limit
+     */
+    public static long getMaxDepth() {
+        return getPositiveLongProperty(DEFAULT_MAX_DEPTH, MAX_DEPTH_PROPERTY, LEGACY_MAX_DEPTH_PROPERTY);
+    }
+
+    /**
+     * Returns the configured maximum array length for legacy Java deserialization.
+     *
+     * @return positive array-length limit
+     */
+    public static long getMaxArrayLength() {
+        return getPositiveLongProperty(DEFAULT_MAX_ARRAY_LENGTH, MAX_ARRAY_LENGTH_PROPERTY, LEGACY_MAX_ARRAY_LENGTH_PROPERTY);
+    }
+
+    /**
+     * Returns the configured maximum object reference count for legacy Java deserialization.
+     *
+     * @return positive reference-count limit
+     */
+    public static long getMaxReferences() {
+        return getPositiveLongProperty(DEFAULT_MAX_REFERENCES, MAX_REFERENCES_PROPERTY, LEGACY_MAX_REFERENCES_PROPERTY);
+    }
+
+    /**
+     * Returns the configured maximum stream byte count for legacy Java deserialization.
+     *
+     * @return positive stream-bytes limit
+     */
+    public static long getMaxBytes() {
+        return getPositiveLongProperty(DEFAULT_MAX_BYTES, MAX_BYTES_PROPERTY, LEGACY_MAX_BYTES_PROPERTY);
+    }
+
+    private static long getPositiveLongProperty(long defaultValue, String... keys) {
+        String raw = resolveConfigProperty(keys);
+        if (raw == null) {
+            return defaultValue;
+        }
+        try {
+            long parsed = Long.parseLong(raw);
+            if (parsed <= 0) {
+                throw new IllegalArgumentException("Serialization limit property must be positive: " + raw);
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid numeric serialization limit property: " + raw, e);
+        }
+    }
+
+    private static boolean matchesAllowlistPatterns(String configuredAllowlist, String className) {
+        if (configuredAllowlist == null || configuredAllowlist.trim().isEmpty()) {
+            return false;
+        }
+        String[] patterns = configuredAllowlist.split("[,;]");
+        for (String pattern : patterns) {
+            if (matchesPattern(pattern.trim(), className)) {
+                return true;
+            }
+        }
         return false;
     }
 

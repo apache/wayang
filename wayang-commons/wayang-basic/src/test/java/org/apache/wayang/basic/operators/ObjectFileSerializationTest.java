@@ -18,6 +18,7 @@
 
 package org.apache.wayang.basic.operators;
 
+import org.apache.wayang.core.api.Configuration;
 import org.junit.Assert;
 import org.junit.Test;
 import testpayload.LegitimatePayload;
@@ -25,7 +26,10 @@ import testpayload.SubclassPayloadWithHook;
 import testpayload.UnrelatedPayloadWithHook;
 
 import java.io.IOException;
+import java.io.InvalidClassException;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class ObjectFileSerializationTest {
@@ -336,6 +340,179 @@ public class ObjectFileSerializationTest {
         SampleJavaRecord deserialized = (SampleJavaRecord) result.get(0);
         Assert.assertEquals("record-data", deserialized.name());
         Assert.assertEquals(100, deserialized.count());
+    }
+
+    @Test
+    public void legacyDeserializationAllowsObjectAndListDeclaredTypes() throws Exception {
+        byte[] objectBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{"hello", 42}, 2, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        List<Object> objects = ObjectFileSerialization.deserializeChunk(
+                objectBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Object.class);
+        Assert.assertEquals(Arrays.asList("hello", 42), objects);
+
+        List<String> arraysList = Arrays.asList("a", "b");
+        List<String> immutableList = List.of("x", "y");
+        ArrayList<String> arrayList = new ArrayList<>(Arrays.asList("z"));
+        byte[] listBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{arraysList, immutableList, arrayList},
+                3,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        List<Object> lists = ObjectFileSerialization.deserializeChunk(
+                listBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+        Assert.assertEquals(3, lists.size());
+        Assert.assertEquals(arraysList, lists.get(0));
+        Assert.assertEquals(immutableList, lists.get(1));
+        Assert.assertEquals(arrayList, lists.get(2));
+
+        // Broad Object/List expected types must still reject non-allowlisted custom subclasses with hooks
+        CustomCollectionPayload.hookExecuted = false;
+        CustomCollectionPayload<String> badList = new CustomCollectionPayload<>();
+        badList.add("evil");
+        byte[] badListBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{badList}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    badListBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+            Assert.fail("Expected InvalidClassException when deserializing custom List subclass under List.class");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom List hook must not execute", CustomCollectionPayload.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesDepthLimit() throws Exception {
+        Object shallow = createNestedLists(8);
+        byte[] shallowBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{shallow}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // Allowed under default limit (100)
+        List<Object> ok = ObjectFileSerialization.deserializeChunk(
+                shallowBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+        Assert.assertEquals(1, ok.size());
+
+        // Rejected under configured small limit
+        System.setProperty(ObjectFileSerialization.MAX_DEPTH_PROPERTY, "4");
+        try {
+            expectLegacyInvalidClass(shallowBytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_DEPTH_PROPERTY);
+        }
+
+        // Rejected under default depth limit (100) without custom property
+        Object tooDeep = createNestedLists(105);
+        byte[] tooDeepBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{tooDeep}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        expectLegacyInvalidClass(tooDeepBytes, List.class);
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesArrayLengthLimit() throws Exception {
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{new int[]{1, 2, 3, 4, 5}},
+                1,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        System.setProperty(ObjectFileSerialization.MAX_ARRAY_LENGTH_PROPERTY, "3");
+        try {
+            expectLegacyInvalidClass(bytes, int[].class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_ARRAY_LENGTH_PROPERTY);
+        }
+
+        // Crafted byte[] stream declaring Integer.MAX_VALUE length must be rejected under default limit before allocation
+        byte[] forgedStream = forgeOversizedByteArrayStream(Integer.MAX_VALUE);
+        try (java.io.ByteArrayInputStream bis = new java.io.ByteArrayInputStream(forgedStream);
+             java.io.ObjectInputStream ois = new java.io.ObjectInputStream(bis)) {
+            ois.setObjectInputFilter(ObjectFileSerialization.createObjectInputFilter(Object.class));
+            ois.readObject();
+            Assert.fail("Expected InvalidClassException for oversized array header");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesReferencesAndBytesLimits() throws Exception {
+        ArrayList<StringBuilder> manyRefs = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            manyRefs.add(new StringBuilder("item-" + i));
+        }
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{manyRefs}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        System.setProperty(ObjectFileSerialization.MAX_REFERENCES_PROPERTY, "10");
+        try {
+            expectLegacyInvalidClass(bytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_REFERENCES_PROPERTY);
+        }
+
+        System.setProperty(ObjectFileSerialization.MAX_BYTES_PROPERTY, "32");
+        try {
+            expectLegacyInvalidClass(bytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_BYTES_PROPERTY);
+        }
+    }
+
+    @Test
+    public void legacyDeserializationUsesWayangConfigurationAllowlist() throws Exception {
+        SerializablePayload payload = new SerializablePayload("cfg-allowed", 77);
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        expectLegacyInvalidClass(bytes, Object.class);
+
+        Configuration cfg = Configuration.getDefaultConfiguration();
+        String prev = cfg.getOptionalStringProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY).orElse("");
+        cfg.setProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY, SerializablePayload.class.getName());
+        try {
+            List<Object> result = ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Object.class);
+            Assert.assertEquals(1, result.size());
+            SerializablePayload deserialized = (SerializablePayload) result.get(0);
+            Assert.assertEquals("cfg-allowed", deserialized.text);
+            Assert.assertEquals(77, deserialized.value);
+        } finally {
+            cfg.setProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY, prev);
+        }
+    }
+
+    private static void expectLegacyInvalidClass(byte[] bytes, Class<?> elementType) throws Exception {
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, elementType);
+            Assert.fail("Expected InvalidClassException");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+    }
+
+    private static ArrayList<Object> createNestedLists(int levels) {
+        ArrayList<Object> current = new ArrayList<>();
+        current.add("leaf");
+        for (int i = 0; i < levels; i++) {
+            ArrayList<Object> parent = new ArrayList<>();
+            parent.add(current);
+            current = parent;
+        }
+        return current;
+    }
+
+    private static byte[] forgeOversizedByteArrayStream(int declaredLength) throws IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos)) {
+            oos.writeObject(new byte[]{1, 2, 3, 4, 5});
+            oos.flush();
+        }
+        byte[] serialized = bos.toByteArray();
+        int lenOffset = serialized.length - 5 - 4;
+        serialized[lenOffset] = (byte) (declaredLength >>> 24);
+        serialized[lenOffset + 1] = (byte) (declaredLength >>> 16);
+        serialized[lenOffset + 2] = (byte) (declaredLength >>> 8);
+        serialized[lenOffset + 3] = (byte) declaredLength;
+        return serialized;
     }
 
     public record SampleJavaRecord(String name, int count) implements Serializable {

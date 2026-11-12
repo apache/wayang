@@ -26,6 +26,7 @@ import org.apache.flink.types.Value;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import org.apache.wayang.basic.operators.ObjectFileSerialization;
@@ -80,14 +81,6 @@ public class WayangValue<T> implements Value {
 
     @Override
     public void write(DataOutputView dataOutputView) throws IOException {
-        String typeName = this.type != null ? this.type.getName() : (this.data != null ? this.data.getClass().getName() : null);
-        if (typeName != null) {
-            dataOutputView.writeBoolean(true);
-            dataOutputView.writeUTF(typeName);
-        } else {
-            dataOutputView.writeBoolean(false);
-        }
-
         byte[] element;
         try {
             element = convertToByte();
@@ -109,32 +102,6 @@ public class WayangValue<T> implements Value {
 
     @Override
     public void read(DataInputView dataInputView) throws IOException {
-        boolean hasType = dataInputView.readBoolean();
-        Class<?> resolvedType = this.type;
-        if (hasType) {
-            String typeName = dataInputView.readUTF();
-            try {
-                ClassLoader cl = Thread.currentThread().getContextClassLoader();
-                if (cl == null) {
-                    cl = getClass().getClassLoader();
-                }
-                @SuppressWarnings("unchecked")
-                Class<T> loaded = (Class<T>) Class.forName(typeName, false, cl);
-                if (!java.io.Serializable.class.isAssignableFrom(loaded)) {
-                    throw new IOException("Stream payload type " + typeName + " is not Serializable");
-                }
-                if (this.type != null && !this.type.isAssignableFrom(loaded)) {
-                    throw new IOException("Stream payload type " + typeName + " is not compatible with expected type " + this.type.getName());
-                }
-                if (this.type == null) {
-                    this.type = loaded;
-                }
-                resolvedType = this.type;
-            } catch (ClassNotFoundException e) {
-                throw new IOException("Could not load payload class: " + typeName, e);
-            }
-        }
-
         int len = dataInputView.readUnsignedByte();
 
         if (len >= HIGH_BIT) {
@@ -142,23 +109,27 @@ public class WayangValue<T> implements Value {
             int curr;
             len = len & 0x7f;
             while ((curr = dataInputView.readUnsignedByte()) >= HIGH_BIT) {
+                if (shift >= 28) {
+                    throw new IOException("Malformed WayangValue length header");
+                }
                 len |= (curr & 0x7f) << shift;
                 shift += 7;
             }
             len |= curr << shift;
         }
 
+        long maxBytes = ObjectFileSerialization.getMaxBytes();
+        if (len < 0 || len > maxBytes) {
+            throw new InvalidClassException(
+                    "WayangValue payload length " + len + " exceeds allowed bounds [0, " + maxBytes + "]");
+        }
+
         byte[] array = new byte[len];
 
-        dataInputView.read(array);
+        dataInputView.readFully(array);
 
         try {
-            this.data = convertToObject(array, resolvedType);
-            if (this.type == null && this.data != null) {
-                @SuppressWarnings("unchecked")
-                Class<T> inferredType = (Class<T>) this.data.getClass();
-                this.type = inferredType;
-            }
+            this.data = convertToObject(array, this.type);
         } catch (WayangException e) {
             if (e.getCause() instanceof IOException) {
                 throw (IOException) e.getCause();
@@ -179,7 +150,7 @@ public class WayangValue<T> implements Value {
     }
 
     public T convertToObject(byte[] array) {
-        return convertToObject(array, this.type != null ? this.type : (this.data != null ? this.data.getClass() : null));
+        return convertToObject(array, this.type);
     }
 
     @SuppressWarnings("unchecked")
@@ -187,13 +158,55 @@ public class WayangValue<T> implements Value {
         if (array == null || array.length == 0) {
             return null;
         }
-        Class<?> targetType = expectedType != null ? expectedType : (this.type != null ? this.type : (this.data != null ? this.data.getClass() : null));
+        long maxBytes = ObjectFileSerialization.getMaxBytes();
+        if (array.length > maxBytes) {
+            throw new WayangException(
+                    "Failed to deserialize WayangValue payload",
+                    new InvalidClassException(
+                            "Payload length " + array.length + " exceeds max bytes limit " + maxBytes));
+        }
+        Class<?> targetType = resolveExpectedType(expectedType);
         try (ByteArrayInputStream bis = new ByteArrayInputStream(array);
              ObjectInputStream in = new ObjectInputStream(bis)) {
             in.setObjectInputFilter(ObjectFileSerialization.createObjectInputFilter(targetType));
-            return (T) in.readObject();
+            Object result = in.readObject();
+            if (targetType != null && !targetType.isPrimitive() && result != null && !targetType.isInstance(result)) {
+                throw new InvalidClassException(
+                        result.getClass().getName(),
+                        "Deserialized payload is not assignable to expected type " + targetType.getName());
+            }
+            return (T) result;
         } catch (IOException | ClassNotFoundException e) {
             throw new WayangException("Failed to deserialize WayangValue payload", e);
+        }
+    }
+
+    private Class<?> resolveExpectedType(Class<?> explicitExpectedType) {
+        if (explicitExpectedType != null) {
+            return explicitExpectedType;
+        }
+        if (this.type != null) {
+            return this.type;
+        }
+        return resolveConfiguredExpectedType();
+    }
+
+    private Class<?> resolveConfiguredExpectedType() {
+        String configuredType = ObjectFileSerialization.resolveConfigProperty(
+                ObjectFileSerialization.FLINK_EXPECTED_TYPE_PROPERTY,
+                ObjectFileSerialization.EXPECTED_TYPE_PROPERTY,
+                ObjectFileSerialization.LEGACY_EXPECTED_TYPE_PROPERTY);
+        if (configuredType == null) {
+            return null;
+        }
+        try {
+            ClassLoader cl = Thread.currentThread().getContextClassLoader();
+            if (cl == null) {
+                cl = getClass().getClassLoader();
+            }
+            return Class.forName(configuredType, false, cl);
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new WayangException("Could not load configured expected payload class: " + configuredType, e);
         }
     }
 
