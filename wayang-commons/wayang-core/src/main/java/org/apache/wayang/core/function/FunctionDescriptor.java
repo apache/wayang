@@ -87,6 +87,7 @@ public abstract class FunctionDescriptor implements Serializable {
      * @param ramEstimator the {@link LoadEstimator} for the RAM load
      * @deprecated Use {@link #setLoadProfileEstimator(LoadProfileEstimator)} instead.
      */
+    @Deprecated
     public void setLoadEstimators(LoadEstimator cpuEstimator, LoadEstimator ramEstimator) {
         this.setLoadProfileEstimator(new NestableLoadProfileEstimator(
                 cpuEstimator,

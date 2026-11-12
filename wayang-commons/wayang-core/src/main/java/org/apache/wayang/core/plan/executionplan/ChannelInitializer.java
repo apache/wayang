@@ -65,6 +65,7 @@ public interface ChannelInitializer {
      * @deprecated not needed anymore
      */
     @SuppressWarnings("unchecked")
+    @Deprecated
     default ChannelInitializer unchecked() {
         return this;
     }

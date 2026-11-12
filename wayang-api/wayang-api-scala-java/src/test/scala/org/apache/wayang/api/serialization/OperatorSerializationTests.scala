@@ -461,19 +461,17 @@ class OperatorSerializationTests extends SerializationTestBase {
     sqlite3dbFile.deleteOnExit()
     configuration.setProperty("wayang.sqlite3.jdbc.url", "jdbc:sqlite:" + sqlite3dbFile.getAbsolutePath)
 
+    val connection: Connection = Sqlite3.platform.createDatabaseDescriptor(configuration).createJdbcConnection
     try {
-      val connection: Connection = Sqlite3.platform.createDatabaseDescriptor(configuration).createJdbcConnection
-      try {
-        val statement: Statement = connection.createStatement
-        statement.addBatch("DROP TABLE IF EXISTS customer;")
-        statement.addBatch("CREATE TABLE customer (name TEXT, age INT);")
-        statement.addBatch("INSERT INTO customer VALUES ('John', 20)")
-        statement.addBatch("INSERT INTO customer VALUES ('Timmy', 16)")
-        statement.addBatch("INSERT INTO customer VALUES ('Evelyn', 35)")
-        statement.executeBatch()
-      } finally {
-        if (connection != null) connection.close()
-      }
+      val statement: Statement = connection.createStatement
+      statement.addBatch("DROP TABLE IF EXISTS customer;")
+      statement.addBatch("CREATE TABLE customer (name TEXT, age INT);")
+      statement.addBatch("INSERT INTO customer VALUES ('John', 20)")
+      statement.addBatch("INSERT INTO customer VALUES ('Timmy', 16)")
+      statement.addBatch("INSERT INTO customer VALUES ('Evelyn', 35)")
+      statement.executeBatch()
+    } finally {
+      if (connection != null) connection.close()
     }
 
     // Set up WayangContext.

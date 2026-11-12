@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -112,6 +113,45 @@ class JavaCoGroupOperatorTest extends JavaExecutionOperatorTestBase {
                 expectedGroups.isEmpty(),
                 String.format("Missing groups: %s", expectedGroups)
         );
+    }
+
+    @Test
+    void testExecutionWithLowCardinalityKeys() {
+        Collection<Tuple2<Integer, String>> coll0 = new ArrayList<>();
+        Collection<Tuple2<String, Integer>> coll1 = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            coll0.add(new Tuple2<>(i % 2, "a" + i));
+            coll1.add(new Tuple2<>("b" + i, i % 2));
+        }
+
+        CollectionChannel.Instance input0 = createCollectionChannelInstance(coll0);
+        CollectionChannel.Instance input1 = createCollectionChannelInstance(coll1);
+        CollectionChannel.Instance output = createCollectionChannelInstance();
+
+        JavaCoGroupOperator<Tuple2<Integer, String>, Tuple2<String, Integer>, Integer> coGroup =
+                new JavaCoGroupOperator<>(
+                        DataSetType.createDefaultUnchecked(Tuple2.class),
+                        DataSetType.createDefaultUnchecked(Tuple2.class),
+                        new ProjectionDescriptor<>(
+                                DataUnitType.createBasicUnchecked(Tuple2.class),
+                                DataUnitType.createBasic(Integer.class),
+                                "field0"),
+                        new ProjectionDescriptor<>(
+                                DataUnitType.createBasicUnchecked(Tuple2.class),
+                                DataUnitType.createBasic(Integer.class),
+                                "field1"));
+
+        JavaChannelInstance[] inputs = new JavaChannelInstance[]{input0, input1};
+        JavaChannelInstance[] outputs = new JavaChannelInstance[]{output};
+        evaluate(coGroup, inputs, outputs);
+
+        final Collection<Tuple2<Iterable<Tuple2<Integer, String>>, Iterable<Tuple2<String, Integer>>>> result =
+                output.provideCollection();
+        assertEquals(2, result.size());
+        for (Tuple2<Iterable<Tuple2<Integer, String>>, Iterable<Tuple2<String, Integer>>> group : result) {
+            assertEquals(500, WayangCollections.asSet(group.field0).size());
+            assertEquals(500, WayangCollections.asSet(group.field1).size());
+        }
     }
 
     private boolean compare(Tuple<Collection<Tuple2<Integer, String>>, Collection<Tuple2<String, Integer>>> expected,

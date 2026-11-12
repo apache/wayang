@@ -75,14 +75,14 @@ public class JavaApacheIcebergSink extends ApacheIcebergSink
      *                        target table
      * @param tableIdentifier fully qualified identifier of the target table
      * 
-     * @param fileFormat      file format used for writing (e.g., Parquet, Avro)
+     * @param outputFileFormat file format used for writing (e.g., Parquet, Avro)
      */
     public JavaApacheIcebergSink(
         Catalog catalog, 
         Schema schema, 
         TableIdentifier tableIdentifier, 
-        FileFormat outputFileFormnat) {
-        super(catalog, schema, tableIdentifier, outputFileFormnat);
+        FileFormat outputFileFormat) {
+        super(catalog, schema, tableIdentifier, outputFileFormat);
     }
 
 

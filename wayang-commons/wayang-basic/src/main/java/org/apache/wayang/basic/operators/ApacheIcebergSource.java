@@ -251,10 +251,10 @@ public class ApacheIcebergSource extends UnarySource<Record> {
     }
 
     /**
-     * Builds a {@link org.apache.iceberg.data.ScanBuilder} for the current table.
+     * Builds a {@link ScanBuilder} for the current table.
      * Applies selected columns and filter expressions if provided.
      *
-     * @return configured {@link org.apache.iceberg.data.ScanBuilder}
+     * @return configured {@link ScanBuilder}
      */
     public ScanBuilder getScanBuilder() {
 

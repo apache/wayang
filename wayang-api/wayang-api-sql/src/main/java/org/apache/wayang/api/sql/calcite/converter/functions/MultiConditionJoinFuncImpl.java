@@ -23,10 +23,13 @@ import org.apache.wayang.basic.data.Tuple2;
 import org.apache.wayang.core.function.FunctionDescriptor;
 
 /**
- * Flattens Tuple2<Record, Record> to Record
+ * Flattens {@code Tuple2<Record, Record>} to {@link Record}.
  */
 public class MultiConditionJoinFuncImpl implements FunctionDescriptor.SerializableFunction<Tuple2<Record, Record>, Record> {
-    
+
+    /**
+     * Creates a new instance.
+     */
     public MultiConditionJoinFuncImpl() {
 
     }

@@ -35,9 +35,9 @@ public class Semantic {
 
 
     /**
-     * Retrieve the {@link SemanticPlatform}.
+     * Retrieve the {@link JavaPlatform}.
      *
-     * @return the {@link SemanticPlatform}
+     * @return the {@link JavaPlatform}
      */
     public static JavaPlatform platform() {
         return JavaPlatform.getInstance();

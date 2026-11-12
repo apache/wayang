@@ -27,10 +27,8 @@ import org.apache.iceberg.FileFormat;
 import org.apache.wayang.basic.data.Record;
 
 /**
- * This {@link UnarySink} writes all incoming data quanta to an iceberg table.
+ * This {@link UnarySink} writes all incoming {@link Record} data quanta to an iceberg table.
  * Either if the table does not exists it will create new, otherwise append.
- * 
- * @param <T> Data Type if the incoming Data Quanta
  */
 public class ApacheIcebergSink extends UnarySink<org.apache.wayang.basic.data.Record> {
 

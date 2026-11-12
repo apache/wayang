@@ -35,7 +35,7 @@ import org.apache.iceberg.expressions.Expression;
 
 
 /**
- * Mapping from {@link ApahceIcebergSource} to {@link JavaApacheIcebergSource}.
+ * Mapping from {@link ApacheIcebergSource} to {@link JavaApacheIcebergSource}.
  */
 public class ApacheIcebergSourceMapping implements Mapping {
 

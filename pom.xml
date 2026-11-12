@@ -93,7 +93,7 @@
         <!-- Timestamp for the reproducible builds -->
         <project.build.outputTimestamp>2026-02-10T16:43:08Z</project.build.outputTimestamp>
 
-        <scala.version>2.12.17</scala.version>
+        <scala.version>2.12.18</scala.version>
         <scala.mayor.version>2.12</scala.mayor.version>
         <spark.version>3.5.8</spark.version>
         <antlr.version>4.9.3</antlr.version>
@@ -113,10 +113,10 @@
 
         <assertj.version>3.27.7</assertj.version>
         <commons-io.version>2.15.1</commons-io.version>
-        <guava.version>33.4.0-jre</guava.version>
+        <guava.version>33.7.1-jre</guava.version>
         <hamcrest.version>2.2</hamcrest.version>
         <jackson.version>2.15.4</jackson.version>
-        <jacoco.version>0.8.9</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <jodatime.version>2.10.6</jodatime.version>
         <jsonpath.version>2.4.0</jsonpath.version>
         <junit5.version>5.14.4</junit5.version>
@@ -155,7 +155,7 @@
                 <dependency>
                     <groupId>org.apache.wayang</groupId>
                     <artifactId>wayang-resources</artifactId>
-                    <version>1.1.2-SNAPSHOT</version>
+                    <version>${project.version}</version>
                     <type>zip</type>
                     <optional>true</optional>
                 </dependency>
@@ -339,7 +339,7 @@
                         <plugin>
                             <groupId>net.alchim31.maven</groupId>
                             <artifactId>scala-maven-plugin</artifactId>
-                            <version>4.9.5</version>
+                            <version>4.10.0</version>
                             <executions>
                                 <execution>
                                     <id>compile-scala</id>
@@ -393,7 +393,7 @@
                 </file>
             </activation>
             <properties>
-                <scala.version>2.12.17</scala.version>
+                <scala.version>2.12.18</scala.version>
                 <scala.mayor.version>2.12</scala.mayor.version>
                 <spark.version>3.5.7</spark.version>
             </properties>
@@ -880,7 +880,7 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <configuration>
-                        <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                        <forceLegacyJavacApi>true</forceLegacyJavacApi>
                     </configuration>
                 </plugin>
 
@@ -990,7 +990,13 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>build-helper-maven-plugin</artifactId>
-                    <version>3.1.0</version>
+                    <version>3.6.2</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>3.6.4</version>
                 </plugin>
 
                 <plugin>
@@ -1053,66 +1059,65 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <useMavenDefaultExcludes>true</useMavenDefaultExcludes>
                     <!--
                        Make rat output the files with missing licensed directly into the
                        build output (This way we don't have to look into the rat.txt to find
                        out which ones)
                    -->
                     <consoleOutput>true</consoleOutput>
-                    <excludes>
+                    <inputExcludes>
                         <!-- Git related files -->
-                        <exclude>**/.git/**</exclude>
-                        <exclude>**/.gitignore</exclude>
-                        <exclude>**/.gitmodules</exclude>
-                        <exclude>**/.github/actions/**</exclude>
+                        <inputExclude>**/.git/**</inputExclude>
+                        <inputExclude>**/.gitignore</inputExclude>
+                        <inputExclude>**/.gitmodules</inputExclude>
+                        <inputExclude>**/.github/actions/**</inputExclude>
 
                         <!-- Maven related files -->
-                        <exclude>**/target/**</exclude>
-                        <exclude>target/**</exclude>
+                        <inputExclude>**/target/**</inputExclude>
+                        <inputExclude>target/**</inputExclude>
 
                         <!-- Eclipse related files -->
-                        <exclude>**/.project</exclude>
-                        <exclude>**/.settings/**</exclude>
-                        <exclude>**/.classpath</exclude>
-                        <exclude>**/.factorypath</exclude>
+                        <inputExclude>**/.project</inputExclude>
+                        <inputExclude>**/.settings/**</inputExclude>
+                        <inputExclude>**/.classpath</inputExclude>
+                        <inputExclude>**/.factorypath</inputExclude>
 
                         <!--RAT files-->
-                        <exclude>**/apache-rat-0.13/**</exclude>
+                        <inputExclude>**/apache-rat-0.13/**</inputExclude>
 
                         <!--Javadoc files-->
-                        <exclude>**/docs/**</exclude>
+                        <inputExclude>**/docs/**</inputExclude>
 
                         <!-- IntelliJ related files -->
-                        <exclude>**/.idea/**</exclude>
-                        <exclude>**/*.iml</exclude>
+                        <inputExclude>**/.idea/**</inputExclude>
+                        <inputExclude>**/*.iml</inputExclude>
 
-                        <exclude>**/*.yaml</exclude>
-                        <exclude>**/*.json</exclude>
+                        <inputExclude>**/*.yaml</inputExclude>
+                        <inputExclude>**/*.json</inputExclude>
 
-                        <exclude>**/*.log</exclude>
-                        <exclude>**/*.input</exclude>
+                        <inputExclude>**/*.log</inputExclude>
+                        <inputExclude>**/*.input</inputExclude>
 
-                        <exclude>**/*.svg</exclude>
-                        <exclude>**/Gemfile.lock</exclude>
-                        <exclude>**/.jekyll-cache/**</exclude>
-                        <exclude>**/README.md</exclude>
-                        <exclude>**/general-todos.md</exclude>
-                        <exclude>**/scala_1*</exclude>
+                        <inputExclude>**/*.svg</inputExclude>
+                        <inputExclude>**/Gemfile.lock</inputExclude>
+                        <inputExclude>**/.jekyll-cache/**</inputExclude>
+                        <inputExclude>**/README.md</inputExclude>
+                        <inputExclude>**/general-todos.md</inputExclude>
+                        <inputExclude>**/scala_1*</inputExclude>
 
-                        <exclude>**/*pb2.py</exclude>
-                        <exclude>**/.rat-excludes</exclude>
-                        <exclude>**/*.csv</exclude>
-                        <exclude>**/*.properties</exclude>
-                        <exclude>**/*.onnx</exclude>
-                    </excludes>
+                        <inputExclude>**/*pb2.py</inputExclude>
+                        <inputExclude>**/.rat-excludes</inputExclude>
+                        <inputExclude>**/*.csv</inputExclude>
+                        <inputExclude>**/*.properties</inputExclude>
+                        <inputExclude>**/*.onnx</inputExclude>
+                    </inputExcludes>
                 </configuration>
             </plugin>
             <!-- Fail the build if some dependency don't have a valid license -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>license-maven-plugin</artifactId>
-                <version>2.0.0</version>
+                <version>2.7.1</version>
                 <executions>
                     <execution>
                         <id>license-check</id>
@@ -1281,7 +1286,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.9</version>
+                <version>${jacoco.version}</version>
                 <executions>
                     <execution>
                         <id>coverage-initialize</id>

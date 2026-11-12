@@ -39,6 +39,7 @@ public class ReduceOperator<Type> extends UnaryToUnaryOperator<Type, Type> {
     /**
      * @deprecated This method is just a hack that is necessary because of the ambiguous nature of this operator.
      */
+    @Deprecated
     public static <Type> ReduceOperator<Type> createGroupedReduce(
             ReduceDescriptor<Type> reduceDescriptor,
             DataSetType<? extends Iterable<Type>> inputType,

@@ -32,42 +32,42 @@
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-core</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-basic</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-utils-profile-db</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-java</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-postgres</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-spatial</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-sqlite3</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-tensorflow</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -87,12 +87,12 @@
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-api-scala-java</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-spark</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -117,7 +117,7 @@
     <dependency>
       <groupId>org.apache.wayang</groupId>
       <artifactId>wayang-flink</artifactId>
-      <version>1.1.2-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 </project>

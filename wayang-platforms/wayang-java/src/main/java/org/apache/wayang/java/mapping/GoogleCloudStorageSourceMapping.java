@@ -32,7 +32,7 @@ import org.apache.wayang.java.operators.JavaGoogleCloudStorageSource;
 import org.apache.wayang.java.platform.JavaPlatform;
 
 /**
- * Mapping from {@link GoogleCloudStorageSource} to {@link JavaGoogleClodStorageSource}.
+ * Mapping from {@link GoogleCloudStorageSource} to {@link JavaGoogleCloudStorageSource}.
  */
 public class GoogleCloudStorageSourceMapping implements Mapping {
     

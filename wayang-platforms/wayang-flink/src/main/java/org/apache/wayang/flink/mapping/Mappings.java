@@ -33,6 +33,7 @@ public class Mappings {
      * Mappings using Flink's DataSets
      * @deprecated DataSet API in Flink has been deprecated move over to bounded streams for a 1-to-1 replacement {@link #BOUNDED_STREAM_MAPPINGS}.
      */
+    @Deprecated
     public static final Collection<Mapping> BASIC_MAPPINGS = Arrays.asList(
             new CartesianMapping(),
             new CoGroupMapping(),

@@ -24,15 +24,22 @@ import java.util.function.Function;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.function.FunctionDescriptor;
 
+/**
+ * Extracts a key for a {@link org.apache.wayang.api.sql.calcite.converter.WayangMultiConditionJoinVisitor}.
+ * Is a subtype of {@link Function} and {@link java.io.Serializable} (as required by engines which use
+ * serialisation, i.e. Flink/Spark).
+ * Takes an input {@link Record} and maps it to a new {@link Record} containing the fields at the given indexes.
+ */
 public class MultiConditionJoinKeyExtractor implements FunctionDescriptor.SerializableFunction<Record, Record> {
+        /**
+         * Indexes of the fields that make up the key.
+         */
         private final Integer[] indexes;
 
     /**
-     * Extracts a key for a {@link WayangMultiConditionJoinVisitor}.
-     * is a subtype of {@link Function}, {@link Serializable} (as required by engines which use serialisation i.e. flink/spark)
-     * Takes an input {@link Record} & {@link Integer} key and maps it to a generic field object T.
-     * Performs an unchecked cast when applied.
-     * @param index key
+     * Creates a new instance.
+     *
+     * @param indexes indexes of the fields that make up the key
      */
     public MultiConditionJoinKeyExtractor(final Integer... indexes) {
         this.indexes = indexes;

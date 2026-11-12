@@ -37,13 +37,20 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * JDBC implementation for {@link ParquetSource}s exposed by an engine as a SQL
- * relation, such as a Hive/Iceberg table or BigQuery external table.
+ * relation, such as a Hive/Iceberg table, BigQuery external table, or DuckDB
+ * view over {@code read_parquet(...)}.
  */
 public abstract class JdbcParquetSource extends ParquetSource implements JdbcSourceOperator {
+
+    private static final Pattern PROPERTY_PLACEHOLDER = Pattern.compile("\\$\\{(env|sys):([^}]+)}");
 
     public JdbcParquetSource(String sourceName, String[] projection, String... columnNames) {
         super(sourceName, projection, columnNames);
@@ -143,6 +150,7 @@ public abstract class JdbcParquetSource extends ParquetSource implements JdbcSou
         }
 
         final String platformId = this.getPlatform().getPlatformId();
+        this.executePrepareSql(connection, configuration, platformId);
         if (isAutoCreateEnabled(configuration, platformId)) {
             this.createExternalRelation(connection, configuration, platformId, sourceName);
         }
@@ -198,6 +206,76 @@ public abstract class JdbcParquetSource extends ParquetSource implements JdbcSou
         }
 
         return Optional.empty();
+    }
+
+    private void executePrepareSql(Connection connection, Configuration configuration, String platformId) {
+        final String prepareSqlKey = String.format("wayang.%s.parquetsource.prepare-sql", platformId);
+        final Optional<String> optionalPrepareSql = configuration.getOptionalStringProperty(prepareSqlKey);
+        if (optionalPrepareSql.isEmpty() || optionalPrepareSql.get().trim().isEmpty()) {
+            return;
+        }
+
+        try (Statement statement = connection.createStatement()) {
+            for (String sql : splitSqlStatements(resolvePlaceholders(optionalPrepareSql.get()))) {
+                statement.execute(sql);
+            }
+        } catch (SQLException e) {
+            throw new WayangException(String.format(
+                    "Could not execute Parquet source prepare SQL configured by '%s'.",
+                    prepareSqlKey
+            ), e);
+        }
+    }
+
+    private static List<String> splitSqlStatements(String sql) {
+        final List<String> statements = new ArrayList<>();
+        final StringBuilder current = new StringBuilder(sql.length());
+        boolean insideSingleQuote = false;
+        for (int i = 0; i < sql.length(); i++) {
+            char currentChar = sql.charAt(i);
+            if (currentChar == '\'') {
+                current.append(currentChar);
+                if (insideSingleQuote && i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+                    current.append(sql.charAt(++i));
+                } else {
+                    insideSingleQuote = !insideSingleQuote;
+                }
+            } else if (currentChar == ';' && !insideSingleQuote) {
+                addStatement(statements, current);
+            } else {
+                current.append(currentChar);
+            }
+        }
+        addStatement(statements, current);
+        return statements;
+    }
+
+    private static void addStatement(List<String> statements, StringBuilder statement) {
+        final String sql = statement.toString().trim();
+        if (!sql.isEmpty()) {
+            statements.add(sql);
+        }
+        statement.setLength(0);
+    }
+
+    private static String resolvePlaceholders(String sql) {
+        Matcher matcher = PROPERTY_PLACEHOLDER.matcher(sql);
+        StringBuffer resolved = new StringBuffer();
+        while (matcher.find()) {
+            final String type = matcher.group(1);
+            final String name = matcher.group(2);
+            final String value = "env".equals(type) ? System.getenv(name) : System.getProperty(name);
+            if (value == null) {
+                throw new WayangException(String.format(
+                        "Could not resolve Parquet source prepare SQL placeholder '${%s:%s}'.",
+                        type,
+                        name
+                ));
+            }
+            matcher.appendReplacement(resolved, Matcher.quoteReplacement(value));
+        }
+        matcher.appendTail(resolved);
+        return resolved.toString();
     }
 
     private static boolean isAutoCreateEnabled(Configuration configuration, String platformId) {

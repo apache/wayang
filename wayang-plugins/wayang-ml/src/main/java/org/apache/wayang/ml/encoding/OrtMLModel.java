@@ -104,7 +104,7 @@ public class OrtMLModel {
     /**
      * Close the session after running, {@link #closeSession()}
      * 
-     * @param encodedVector
+     * @param input1
      * @return NaN on error, and a predicted cost on any other value.
      * @throws OrtException
      */

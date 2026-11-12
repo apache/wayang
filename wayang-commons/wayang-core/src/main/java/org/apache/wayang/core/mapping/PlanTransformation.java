@@ -146,6 +146,7 @@ public class PlanTransformation {
     /**
      * @deprecated use {@link #introduceAlternative(WayangPlan, SubplanMatch, Operator)}
      */
+    @Deprecated
     private void replace(WayangPlan plan, SubplanMatch match, Operator replacement) {
         // Disconnect the original input operator and insert the replacement input operator.
         final Operator originalInputOperator = match.getInputMatch().getOperator();

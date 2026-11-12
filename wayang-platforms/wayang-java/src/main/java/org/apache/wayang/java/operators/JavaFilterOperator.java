@@ -54,7 +54,7 @@ public class JavaFilterOperator<Type>
     /**
      * Creates a new instance.
      *
-     * @param type type of the dataset elements
+     * @param predicateDescriptor type of the dataset elements
      */
     public JavaFilterOperator(PredicateDescriptor<Type> predicateDescriptor) {
         super(predicateDescriptor);

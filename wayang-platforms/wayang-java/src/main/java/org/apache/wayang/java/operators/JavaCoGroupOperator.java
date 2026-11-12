@@ -117,7 +117,7 @@ public class JavaCoGroupOperator<InputType0, InputType1, KeyType>
 
         // Create the co-groups.
         Collection<Tuple2<Iterable<InputType0>, Iterable<InputType1>>> coGroups =
-                new ArrayList<>(expectedNumElements0 + expectedNumElements1);
+                new ArrayList<>(groups0.size() + groups1.size());
         for (Map.Entry<KeyType, Collection<InputType0>> entry : groups0.entrySet()) {
             Collection<InputType0> group0 = entry.getValue();
             Collection<InputType1> group1 = groups1.remove(entry.getKey());

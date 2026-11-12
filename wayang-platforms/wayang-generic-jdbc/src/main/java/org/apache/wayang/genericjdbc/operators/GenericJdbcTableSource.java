@@ -44,7 +44,6 @@ public class GenericJdbcTableSource extends JdbcTableSource implements GenericJd
      * Creates a new instance.
      *
      * @param tableName   the table to read from
-     * @param jdbcName    the JDBC configuration name
      * @param columnNames the columns to read
      */
     public GenericJdbcTableSource(String tableName, String... columnNames) {

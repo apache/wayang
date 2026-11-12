@@ -58,7 +58,6 @@ extends ApacheIcebergSource implements JavaExecutionOperator {
      *                         filters; empty list for none
      * @param columns          collection of column names to project; empty list for
      *                         all columns
-     * @return a new {@link JavaApacheIcebergSource} instance
      */
 
     public JavaApacheIcebergSource(Catalog catalog, TableIdentifier tableIdentifier,

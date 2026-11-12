@@ -109,6 +109,7 @@ public interface ExecutionOperator extends ElementaryOperator {
     /**
      * @deprecated Use {@link #getLoadProfileEstimatorConfigurationKeys()}
      */
+    @Deprecated
     default String getLoadProfileEstimatorConfigurationKey() {
         return null;
     }
