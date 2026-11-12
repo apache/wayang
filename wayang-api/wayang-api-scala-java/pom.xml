@@ -33,7 +33,6 @@
 
     <properties>
         <java-module-name>org.apache.wayang.api</java-module-name>
-        <jackson.version>2.18.11</jackson.version>
         <tensorflow.version>1.0.0</tensorflow.version>
     </properties>
 
@@ -143,7 +142,7 @@
         <dependency>
           <groupId>io.netty</groupId>
           <artifactId>netty-all</artifactId>
-          <version>4.1.89.Final</version>
+          <version>4.1.140.Final</version>
         </dependency>
         <dependency>
           <groupId>com.google.protobuf</groupId>

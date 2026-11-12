@@ -35,7 +35,6 @@
 
       <properties>
         <iceberg.version>1.6.0</iceberg.version>
-        <hadoop.version>3.4.0</hadoop.version>
     </properties>
 
 <dependencyManagement>
