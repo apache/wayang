@@ -119,6 +119,83 @@ configuration.set_property("wayang.api.python.port", "8080")
 The same values can be supplied through environment variables:
 `WAYANG_API_URL`, or `WAYANG_API_HOST` and `WAYANG_API_PORT`.
 
+## In-memory collections
+
+`load_collection()` snapshots a Python list or tuple and returns a `DataQuanta`:
+
+```python
+from pywy.dataquanta import WayangContext
+from pywy.platforms.java import JavaPlugin
+
+ctx = WayangContext().register({JavaPlugin})
+ctx.load_collection([1, 2, 3]).store_textfile("file:///tmp/numbers.txt")
+```
+
+Supported values are built-in strings, booleans, signed 64-bit integers, finite
+floats, and nested lists or tuples. Tuples become lists. Empty and mixed
+collections are supported. Input order and nested structure are preserved by
+the source; subsequent operators/platforms determine result ordering. `None`,
+mappings, sets, generators, custom objects, cyclic containers, out-of-range
+integers, and non-finite floats are rejected before submission.
+
+The current Python worker passes records to UDFs as strings, including records
+from collection sources. Convert numeric inputs explicitly:
+
+```python
+(ctx.load_collection([1, 2, 3])
+ .filter(lambda value: int(value) > 1, str)
+ .map(lambda value: int(value) * 2, str, int)
+ .store_textfile("file:///tmp/doubled.txt"))
+```
+
+This example uses the existing fusion of adjacent Python transformations into
+one worker call. The standalone Python filter and primitive-typed map-to-text
+paths have existing limitations (empty filter output and incompatible sink
+types, respectively), also reproducible with text-file sources. Collection
+input does not change those paths.
+
+Nested values remain structured on the JVM, but reach Python UDFs and text sinks
+in Java list notation, such as `[1, 2]`. This is not a JSON round-trip format.
+Text sinks use the existing JVM string representation, one record per line;
+embedded newlines in strings produce additional lines. File paths refer to the
+backend's filesystem. Collection data is held in memory and sent in one JSON
+request, so this source is intended for small local datasets.
+
+This API requires a backend supporting literal `inputCollection.data.values`.
+The backend continues to accept existing `inputCollection.data.udf` plans.
+
+### Collecting results
+
+Use `collect()` to execute a pipeline and receive a Python list:
+
+```python
+result = (ctx.load_collection([1, 2, 3])
+          .map(lambda value: int(value) * 2, str, int)
+          .collect())
+# [2, 4, 6]
+```
+
+Empty results return `[]`. Supported result values are the same as collection
+inputs: strings, booleans, signed 64-bit integers, finite floats, and nested
+lists/tuples (tuples become lists). Unsupported values cause an error instead
+of being converted to strings. Each call executes the pipeline again without
+changing the graph. Result order depends on the operators and platform.
+
+Adjacent Python transformations at the end of a collected pipeline run together
+and encode their results before crossing the worker boundary. This preserves
+their runtime types, including nested values, and supports standalone maps and
+filters. Inputs to those transformations still follow the existing string-based
+worker behavior: filtering `[1, 2, 3]` with `lambda x: int(x) > 1` yields
+`["2", "3"]`. Map with `int` before filtering to retain numeric results in the
+fused pipeline. Earlier worker boundaries, for example before a join, retain
+their existing limitations; collecting cannot restore types already lost there.
+
+The backend, Python client, and worker must all include collect support.
+Execution failures raise `requests.HTTPError` with the backend error response;
+invalid or unsupported responses raise `ValueError`. Results are materialized
+in backend and client memory, so use this method for results that fit in memory.
+`store_textfile()` and legacy REST responses retain their existing behavior.
+
 ## Docker
 
 The Python API can be run with the Wayang REST API as a separate container.
@@ -148,3 +225,41 @@ docker network rm wayang-python
 
 ### Testing python code 
 You can run the python tests by using pytest, the requirements for the tests are listed in `python/src/pywy/requirements.txt`. To run the tests navigate to the base wayang folder, e.g. `/var/www/html` and run `pytest -s python/src/pywy` if you need to pass a specific configuration for your use case you can also add a config flag `pytest -s --config=pathToYourConfig python/src/pywy/`
+
+The collection unit tests run without a backend:
+
+```bash
+PYTHONPATH=python/src pytest -q python/src/pywy/tests/test_load_collection.py \
+  python/src/pywy/tests/test_collect.py
+```
+
+For the collection integration tests, build and install the JSON API and its
+dependencies with JDK 17 (`./mvnw install -pl :wayang-api-json -am -DskipTests`).
+Start `org.apache.wayang.api.json.Main` as described in the JSON API README, or use:
+
+```bash
+./mvnw -pl :wayang-api-json exec:java \
+  -Dexec.mainClass=org.apache.wayang.api.json.Main -Dexec.args=8080 \
+  -Dwayang.configuration=file:///absolute/path/to/wayang.properties
+```
+
+The properties file must set `wayang.api.python.path` to the Python executable,
+`wayang.api.python.worker` to the absolute path of
+`python/src/pywy/execution/worker.py`, and `wayang.api.python.env.path` to the
+absolute path of `python/src`. Run from the repository root against a backend
+on the same machine (the tests read its output files):
+
+```bash
+PYTHONPATH=python/src \
+PYWAYANG_INTEGRATION_URL=http://localhost:8080/wayang-api-json/submit-plan/json \
+pytest -q python/src/pywy/tests/test_load_collection_integration.py \
+  python/src/pywy/tests/test_collect_integration.py
+```
+
+Without `PYWAYANG_INTEGRATION_URL`, these integration tests explicitly skip.
+The collect tests cover typed results, repeated execution, backend failures,
+and compatibility with text sinks and legacy REST clients. Set
+`PYWAYANG_TEST_SPARK=1` to also exercise collection on local Spark; the backend
+must be configured to run Spark with the JVM options required by JDK 17.
+The [wayang-submit launcher](../bin/wayang-submit) supplies these options. When
+starting the backend with Maven, pass its `--add-opens` options in `MAVEN_OPTS`.

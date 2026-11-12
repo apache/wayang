@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 
-from typing import Set, Iterable
+from typing import Set, Dict
 import json
 import base64
 import cloudpickle
@@ -28,14 +28,19 @@ from pywy.core.functions import ChainedFunctions
 from pywy.graph.graph import WayangGraph
 from pywy.graph.types import WGraphOfVec, NodeOperator, NodeVec
 from pywy.types import get_java_type, NDimArray, ndim_from_type
-from pywy.operators import SinkOperator, UnaryToUnaryOperator, SourceUnaryOperator
+from pywy.operators import PywyOperator, SinkOperator, UnaryToUnaryOperator, SourceUnaryOperator
 
 
 class JSONSerializer:
-    id_table: Iterable[int]
+    id_table: Dict[PywyOperator, int]
 
-    def __init__(self, id_table: Iterable[int]):
+    def __init__(self, id_table: Dict[PywyOperator, int]):
         self.id_table = id_table
+        # Forward links retain only the latest consumer, so derive edges from this plan's inputs.
+        self.consumers = {operator: [] for operator in id_table}
+        for operator in id_table:
+            for upstream in operator.inputOperator:
+                self.consumers[upstream].append(operator)
 
     def serialize(self, operator):
         json_operator = {}
@@ -48,7 +53,9 @@ class JSONSerializer:
             json_operator["input"] = []
 
         if operator.cat != "output":
-            json_operator["output"] = list(map(lambda x: self.id_table[x], operator.outputOperator))
+            json_operator["output"] = [
+                self.id_table[output] for output in self.consumers[operator]
+            ]
         else:
             json_operator["output"] = []
 
@@ -60,7 +67,10 @@ class JSONSerializer:
         if hasattr(operator, "output_type") and operator.output_type is not None:
             json_operator["data"]["outputType"] = ndim_from_type(operator.output_type).to_json()
 
-        if operator.json_name == "filter":
+        if operator.json_name == "inputCollection":
+            json_operator["data"]["values"] = operator.values
+
+        elif operator.json_name == "filter":
             json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(operator.use_predicate)).decode('utf-8')
 
         elif operator.json_name == "reduceBy":
@@ -93,7 +103,7 @@ class JSONSerializer:
 
         return json_operator
 
-    def serialize_pipeline(self, pipeline):
+    def serialize_pipeline(self, pipeline, json_output=False):
         assert len(pipeline) > 0
 
         json_operator = {}
@@ -102,9 +112,11 @@ class JSONSerializer:
         json_operator["cat"] = "unary"
         json_operator["data"] = {}
         json_operator["input"] = list(map(lambda x: self.id_table[x], pipeline[0].inputOperator))
-        json_operator["output"] = list(map(lambda x: self.id_table[x], pipeline[-1].outputOperator))
+        json_operator["output"] = [
+            self.id_table[output] for output in self.consumers[pipeline[-1]]
+        ]
 
-        if len(pipeline) == 1:
+        if len(pipeline) == 1 and not json_output:
             return self.serialize(pipeline[0])
 
         chainedUdfs = ChainedFunctions()
@@ -114,6 +126,9 @@ class JSONSerializer:
             if hasattr(operator, "get_udf"):
                 chainedUdfs.add_function(operator.get_udf)
 
-        json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(chainedUdfs.execute)).decode('utf-8')
+        udf = chainedUdfs.execute_json if json_output else chainedUdfs.execute
+        json_operator["data"]["udf"] = base64.b64encode(cloudpickle.dumps(udf)).decode('utf-8')
+        if json_output:
+            json_operator["data"]["jsonOutput"] = True
 
         return json_operator

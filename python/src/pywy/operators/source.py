@@ -15,6 +15,7 @@
 #  limitations under the License.
 #
 
+import math
 from typing import List, Optional
 
 from pywy.operators.base import PywyOperator
@@ -42,6 +43,40 @@ class SourceUnaryOperator(PywyOperator):
 
     def __repr__(self):
         return super().__repr__()
+
+
+class CollectionSource(SourceUnaryOperator):
+    def __init__(self, collection):
+        # Empty and heterogeneous collections use the backend's generic type.
+        super().__init__('Collection', output_type=None)
+        self.json_name = "inputCollection"
+        if type(collection) not in (list, tuple):
+            raise TypeError("load_collection expects a list or tuple")
+        self.values = self._snapshot(collection, set(), "collection")
+
+    @staticmethod
+    def _snapshot(value, ancestors, path):
+        if type(value) in (str, bool):
+            return value
+        if type(value) is int:
+            if not -(2 ** 63) <= value < 2 ** 63:
+                raise ValueError(f"{path}: integers must fit in signed 64 bits")
+            return value
+        if type(value) is float:
+            if not math.isfinite(value):
+                raise ValueError(f"{path}: floats must be finite")
+            return value
+        if type(value) in (list, tuple):
+            if id(value) in ancestors:
+                raise ValueError(f"{path}: cyclic collections are not supported")
+            ancestors.add(id(value))
+            result = [
+                CollectionSource._snapshot(item, ancestors, f"{path}[{index}]")
+                for index, item in enumerate(value)
+            ]
+            ancestors.remove(id(value))
+            return result
+        raise TypeError(f"{path}: unsupported collection value of type {type(value).__name__}")
 
 
 class TextFileSource(SourceUnaryOperator):

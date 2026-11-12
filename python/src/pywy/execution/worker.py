@@ -22,7 +22,7 @@ import socket
 import struct
 
 import numpy as np
-from pywy.execution.util import SpecialLengths
+from pywy.execution.util import JsonRecord, SpecialLengths
 
 
 def read_int(stream):
@@ -69,7 +69,9 @@ def write_int(p, outfile):
 
 
 def write_with_length(obj, stream):
-    if type(obj) is list:
+    if type(obj) is JsonRecord:
+        serialized = obj
+    elif type(obj) is list:
         arr = np.array(obj)
         serialized = arr.tobytes()
     else:
