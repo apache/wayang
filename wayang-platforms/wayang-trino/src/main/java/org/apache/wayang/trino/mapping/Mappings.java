@@ -32,6 +32,7 @@ public class Mappings {
             new FilterMapping(),
             new GlobalReduceMapping(),
             new JoinMapping(),
+            new ParquetSourceMapping(),
             new ProjectionMapping(),
             new ReduceByMapping(),
             new SortMapping(),
