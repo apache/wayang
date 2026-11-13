@@ -48,7 +48,6 @@
         <commons-io.version>2.15.1</commons-io.version>
         <hamcrest.version>2.2</hamcrest.version>
         <jackson.version>2.15.4</jackson.version>
-        <jacoco.version>0.8.9</jacoco.version>
         <jodatime.version>2.10.6</jodatime.version>
         <jsonpath.version>2.4.0</jsonpath.version>
         <junit5.version>5.12.2</junit5.version>
@@ -56,6 +55,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.wayang</groupId>
+            <artifactId>wayang-duckdb</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.wayang</groupId>
             <artifactId>wayang-bigquery</artifactId>
@@ -70,11 +74,6 @@
             <groupId>org.apache.wayang</groupId>
             <artifactId>wayang-trino</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.antlr</groupId>
-            <artifactId>antlr4-runtime</artifactId>
-            <version>4.13.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.wayang</groupId>
@@ -110,7 +109,7 @@
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
-            <version>2.12.17</version>
+            <version>${scala.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
