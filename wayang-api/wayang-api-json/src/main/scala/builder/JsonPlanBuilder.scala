@@ -18,7 +18,7 @@
 package org.apache.wayang.api.json.builder
 
 import org.apache.wayang.api.json.operatorfromjson.OperatorFromJson.ExecutionPlatforms
-import org.apache.wayang.api.json.parserutil.{SerializableIterable, SerializableLambda, SerializableLambda2}
+import org.apache.wayang.api.json.parserutil.{SerializableLambda, SerializableLambda2}
 import org.apache.wayang.api.json.operatorfromjson.{ComposedOperatorFromJson, OperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.binary.{CartesianOperatorFromJson, CoGroupOperatorFromJson, IntersectOperatorFromJson, JoinOperatorFromJson, PredictOperatorFromJson, DLTrainingOperatorFromJson, UnionOperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.other.KMeansFromJson
@@ -213,11 +213,11 @@ class JsonPlanBuilder() {
   }
 
   private def visit(operator: InputCollectionFromJson, planBuilder: PlanBuilder): DataQuanta[Any] = {
-    val iterable = SerializableIterable.create(operator.data.udf)
+    val iterable = operator.data.collection
     if (!ExecutionPlatforms.All.contains(operator.executionPlatform))
-      planBuilder.loadCollection(iterable.get)
+      planBuilder.loadCollection(iterable)
     else
-      planBuilder.loadCollection(iterable.get).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform))
+      planBuilder.loadCollection(iterable).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform))
   }
 
   private def visit(operator: TableInputFromJson, planBuilder: PlanBuilder): DataQuanta[Any] = {

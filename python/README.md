@@ -119,6 +119,25 @@ configuration.set_property("wayang.api.python.port", "8080")
 The same values can be supplied through environment variables:
 `WAYANG_API_URL`, or `WAYANG_API_HOST` and `WAYANG_API_PORT`.
 
+## In-memory collections
+
+`load_collection()` creates a `DataQuanta` from a Python list, tuple, or NumPy
+array. It copies the input, preserving order and nesting; empty inputs are valid.
+Supported elements are strings, booleans, signed 64-bit integers, finite floats,
+and nested lists, tuples, or arrays. NumPy boolean, integer, float16/32/64, and
+Unicode values are supported within the same limits. Unsupported values raise
+`TypeError` or `ValueError` before execution.
+
+```python
+import numpy as np
+from pywy.dataquanta import WayangContext
+from pywy.platforms.java import JavaPlugin
+
+ctx = WayangContext().register({JavaPlugin})
+ctx.load_collection([1, 2, 3]).store_textfile("file:///tmp/numbers.txt")
+ctx.load_collection(np.array([1.5, 2.5])).store_textfile("file:///tmp/floats.txt")
+```
+
 ## Docker
 
 The Python API can be run with the Wayang REST API as a separate container.
@@ -148,3 +167,7 @@ docker network rm wayang-python
 
 ### Testing python code 
 You can run the python tests by using pytest, the requirements for the tests are listed in `python/src/pywy/requirements.txt`. To run the tests navigate to the base wayang folder, e.g. `/var/www/html` and run `pytest -s python/src/pywy` if you need to pass a specific configuration for your use case you can also add a config flag `pytest -s --config=pathToYourConfig python/src/pywy/`
+
+Collection unit tests run without a backend. See the setup instructions in
+[`test_load_collection_integration.py`](src/pywy/tests/test_load_collection_integration.py)
+for running the collection tests against a local REST backend.
