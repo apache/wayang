@@ -26,6 +26,7 @@ import org.apache.wayang.basic.function.ProjectionDescriptor;
 import org.apache.wayang.basic.operators.FilterOperator;
 import org.apache.wayang.basic.operators.GlobalReduceOperator;
 import org.apache.wayang.basic.operators.JoinOperator;
+import org.apache.wayang.basic.operators.LocalCallbackSink;
 import org.apache.wayang.basic.operators.MapOperator;
 import org.apache.wayang.basic.operators.ReduceByOperator;
 import org.apache.wayang.basic.operators.SortOperator;
@@ -48,6 +49,7 @@ import org.apache.wayang.core.mapping.SubplanPattern;
 import org.apache.wayang.core.plan.wayangplan.WayangPlan;
 import org.apache.wayang.core.types.DataSetType;
 import org.apache.wayang.core.types.DataUnitType;
+import org.apache.wayang.java.Java;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,18 +58,23 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -93,6 +100,7 @@ class ClickHouseOperatorsIT {
     private static final String CUSTOMERS = DATABASE + ".customers";
     private static final String SINK_TABLE_NAME = "operator_result";
     private static final String SINK_TABLE = DATABASE + "." + SINK_TABLE_NAME;
+    private static final String TYPES = DATABASE + ".types";
     private static final String[] JOIN_COLUMNS = {
             "order_id", "customer_id", "region", "amount", "cust_id", "name", "tier"
     };
@@ -145,6 +153,15 @@ class ClickHouseOperatorsIT {
                     + "(101, 'Globex', 'SILVER'),"
                     + "(102, 'Initech','BRONZE')");
 
+            st.execute("DROP TABLE IF EXISTS " + TYPES);
+            st.execute("CREATE TABLE " + TYPES + " ("
+                    + "id Int32, big UInt64, day Date, ts DateTime('UTC'),"
+                    + " note Nullable(String), tag LowCardinality(String)"
+                    + ") ENGINE = MergeTree ORDER BY id");
+            st.execute("INSERT INTO " + TYPES + " VALUES "
+                    + "(1, 18446744073709551615, '2026-01-10', '2026-01-10 12:30:00', NULL, 'gold'),"
+                    + "(2, 7, '2026-01-11', '2026-01-11 00:00:00', 'hello', 'silver')");
+
             System.out.println("[ClickHouseOperatorsIT] Connected at " + JDBC_URL
                     + " — fixtures created.");
         }
@@ -160,6 +177,7 @@ class ClickHouseOperatorsIT {
             st.execute("DROP TABLE IF EXISTS " + ORDERS);
             st.execute("DROP TABLE IF EXISTS " + CUSTOMERS);
             st.execute("DROP TABLE IF EXISTS " + SINK_TABLE);
+            st.execute("DROP TABLE IF EXISTS " + TYPES);
         } catch (Exception e) {
             System.err.println("[ClickHouseOperatorsIT] cleanup failed: " + e.getMessage());
         }
@@ -404,6 +422,40 @@ class ClickHouseOperatorsIT {
                 "join should yield one row per order");
         assertEquals(0, queryLong("SELECT countIf(customer_id != cust_id) FROM " + SINK_TABLE),
                 "joined customer IDs should match");
+    }
+
+    @Test
+    @Order(11)
+    void clickHouseTypesReachJavaRecords() {
+        Assumptions.assumeTrue(clickHouseAvailable, "ClickHouse not reachable");
+
+        List<Record> records = new ArrayList<>();
+        ClickHouseTableSource src = new ClickHouseTableSource(
+                TYPES, "id", "big", "day", "ts", "note", "tag");
+        LocalCallbackSink<Record> sink = LocalCallbackSink.createCollectingSink(records, Record.class);
+        src.connectTo(0, sink, 0);
+
+        wayangContext().withPlugin(Java.basicPlugin()).execute(new WayangPlan(sink));
+
+        assertEquals(2, records.size(), "both rows expected");
+        records.sort((a, b) -> Integer.compare((Integer) a.getField(0), (Integer) b.getField(0)));
+        Record first = records.get(0);
+        Record second = records.get(1);
+
+        // Int32 -> Integer
+        assertEquals(1, first.getField(0));
+        // UInt64 -> BigInteger, so values above Long.MAX_VALUE survive.
+        assertEquals(new BigInteger("18446744073709551615"), first.getField(1));
+        assertEquals(BigInteger.valueOf(7), second.getField(1));
+        // Date -> java.sql.Date, DateTime -> java.sql.Timestamp
+        assertInstanceOf(java.sql.Date.class, first.getField(2));
+        assertInstanceOf(java.sql.Timestamp.class, first.getField(3));
+        // Nullable(String) -> null or String
+        assertNull(first.getField(4));
+        assertEquals("hello", second.getField(4));
+        // LowCardinality(String) -> String
+        assertEquals("gold", first.getField(5));
+        assertEquals("silver", second.getField(5));
     }
 
     private WayangContext wayangContext() {

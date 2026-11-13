@@ -30,9 +30,18 @@ in [`wayang-applications/clickhouse.md`](../../wayang-applications/clickhouse.md
 - ClickHouse identifiers are case-sensitive. Prefer `database.table` names.
 - Joins build the hash table from the right input; nullable join behaviour
   follows the server's `join_use_nulls` setting (default `0`).
-- JDBC types such as `UInt64`, `Date`/`DateTime`, `Nullable(T)`, and
-  `LowCardinality(String)` are returned via `ResultSet.getObject` into
-  Wayang `Record`s as the driver provides them.
+- Column values reach Wayang `Record`s via `ResultSet.getObject`, as the driver
+  provides them. With `clickhouse-jdbc` 0.11.1 (covered by
+  `ClickHouseOperatorsIT`):
+
+  | ClickHouse type | Java type in the `Record` |
+  |---|---|
+  | `Int32` | `Integer` |
+  | `UInt64` | `java.math.BigInteger` |
+  | `Date` | `java.sql.Date` |
+  | `DateTime` | `java.sql.Timestamp` |
+  | `Nullable(String)` | `String` or `null` |
+  | `LowCardinality(String)` | `String` |
 
 
 ## Integration tests
