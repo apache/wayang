@@ -15,10 +15,32 @@
 #  limitations under the License.
 #
 
-"""Run against a local backend using PYWAYANG_INTEGRATION_URL (see README)."""
+r"""Collection tests using real HTTP requests and backend output files.
+
+From the repository root, with JDK 17 and the Python requirements installed:
+
+    ./mvnw install -pl :wayang-api-json -am -DskipTests
+    ./mvnw -pl :wayang-api-json exec:java \
+        -Dexec.mainClass=org.apache.wayang.api.json.Main -Dexec.args=8080 \
+        -Dwayang.configuration=file:///absolute/path/to/wayang.properties
+
+Set these properties to absolute paths in wayang.properties:
+    wayang.api.python.path = <Python executable>
+    wayang.api.python.worker = <repo>/python/src/pywy/execution/worker.py
+    wayang.api.python.env.path = <repo>/python/src
+
+In another terminal, run against that backend on the same machine:
+
+    PYTHONPATH=python/src \
+    PYWAYANG_INTEGRATION_URL=http://localhost:8080/wayang-api-json/submit-plan/json \
+    pytest -q python/src/pywy/tests/test_load_collection_integration.py
+
+These tests skip when PYWAYANG_INTEGRATION_URL is unset.
+"""
 
 import os
 
+import numpy as np
 import pytest
 import requests
 
@@ -55,6 +77,13 @@ def collection_context(monkeypatch):
     ([], ""),
     ([True, False], "true\nfalse\n"),
     ([[1, 2], [], [3, ["nested", False]]], "[1, 2]\n[]\n[3, [nested, false]]\n"),
+    (np.array([1, -2, 2 ** 63 - 1], dtype=np.int64), "1\n-2\n9223372036854775807\n"),
+    (np.array([1.5, -0.0], dtype=np.float32), "1.5\n-0.0\n"),
+    (np.array([True, False]), "true\nfalse\n"),
+    (np.array(["雪", '"quoted"']), '雪\n"quoted"\n'),
+    (np.array([[1, 2], [3, 4]]), "[1, 2]\n[3, 4]\n"),
+    (np.empty((0, 2)), ""),
+    ([np.int32(1), np.float64(2.5), np.bool_(True), np.str_("雪")], "1\n2.5\ntrue\n雪\n"),
 ])
 def test_collection_to_textfile(collection_context, tmp_path, values, expected):
     output = tmp_path / "collection.txt"

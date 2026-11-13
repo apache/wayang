@@ -17,6 +17,8 @@
 
 from typing import Set, List, Optional, Tuple, Union, cast
 
+from numpy import ndarray
+
 from pywy.core.core import Plugin, PywyPlan
 from pywy.operators.base import PO_T
 from pywy.types import (GenericTco, Predicate, Function, BiFunction, FlatmapFunction, IterableOut, T, In, Out)
@@ -56,18 +58,19 @@ class WayangContext:
     def textfile(self, file_path: str) -> "DataQuanta[str]":
         return DataQuanta(self, TextFileSource(file_path))
 
-    def load_collection(self, collection: Union[List[T], Tuple[T, ...]]) -> "DataQuanta[T]":
-        """Create a source from a snapshot of an ordered list or tuple.
+    def load_collection(self, collection: Union[List[T], Tuple[T, ...], ndarray]) -> "DataQuanta[T]":
+        """Create a source from a snapshot of a list, tuple, or NumPy array.
 
         Values may be strings, booleans, signed 64-bit integers, finite floats,
-        or nested lists/tuples (tuples become lists). Empty collections are valid.
+        or nested lists/tuples/arrays (containers become lists). NumPy boolean,
+        integer, float16/32/64, and Unicode scalars are converted to Python values.
+        Arrays must have at least one dimension at the top level; nested scalar
+        arrays become scalar values. Empty collections are valid.
         Other values, including None, mappings, sets, and cyclic containers,
         raise TypeError or ValueError before a plan is submitted.
 
         As with other sources, the current Python worker passes records to UDFs
-        as strings. Numeric UDFs must convert their input explicitly with int()
-        or float(). See the README for a fused transformation example and
-        existing worker limitations.
+        as strings. Numeric UDFs must convert their input with int() or float().
         """
         return DataQuanta(self, CollectionSource(collection))
 

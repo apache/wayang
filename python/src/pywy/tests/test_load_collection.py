@@ -20,6 +20,7 @@ import json
 from unittest.mock import patch
 
 import cloudpickle
+import numpy as np
 import pytest
 
 from pywy.dataquanta import DataQuanta, WayangContext
@@ -45,9 +46,12 @@ def test_collection_plan(values):
     assert data.operator.inputs == 0
     assert data.operator.outputs == 1
 
+    # Capture the submitted JSON without requiring a running REST server.
+    # Actual HTTP execution and file contents are covered by the integration tests.
     with patch("pywy.core.core.requests.post") as post:
         data.store_textfile("file:///tmp/collection.txt")
 
+    post.assert_called_once()
     plan = json.loads(json.dumps(post.call_args.kwargs["json"], allow_nan=False))
     assert plan["context"]["origin"] == "python"
     assert plan["context"]["platforms"] == ["java"]
@@ -73,7 +77,7 @@ def test_snapshot_and_tuples():
 
 @pytest.mark.parametrize("values", ["abc", b"abc", {1, 2}, {"a": 1}, None, iter([1, 2])])
 def test_reject_unordered_or_non_collection_inputs(values):
-    with pytest.raises(TypeError, match="expects a list or tuple"):
+    with pytest.raises(TypeError, match="expects a list, tuple, or NumPy array"):
         WayangContext().load_collection(values)
 
 
@@ -97,6 +101,7 @@ def test_reject_cycles():
 
 
 def test_collection_transformation():
+    # Inspect the serialized pipeline; only the HTTP request is mocked.
     with patch("pywy.core.core.requests.post") as post:
         (WayangContext().register({JavaPlugin}).load_collection([3, 1, 2])
          .filter(lambda value: int(value) > 1, str)
@@ -110,3 +115,79 @@ def test_collection_transformation():
     assert transform["operatorName"] == "mapPartitions"
     udf = cloudpickle.loads(base64.b64decode(transform["data"]["udf"]))
     assert list(udf(iter(["3", "1", "2"]))) == [6, 4]
+
+
+@pytest.mark.parametrize("values, expected", [
+    (np.array([1, -2], dtype=np.int32), [1, -2]),
+    (np.array([-(2 ** 63), 2 ** 63 - 1], dtype=np.int64), [-(2 ** 63), 2 ** 63 - 1]),
+    (np.array([0, 2 ** 63 - 1], dtype=np.uint64), [0, 2 ** 63 - 1]),
+    (np.array([1.5, -0.0], dtype=np.float16), [1.5, -0.0]),
+    (np.array([1.5, 2.25], dtype=np.float32), [1.5, 2.25]),
+    (np.array([1.23456789012345], dtype=np.float64), [1.23456789012345]),
+    (np.array([True, False]), [True, False]),
+    (np.array(['"quoted"', "雪\n\\"]), ['"quoted"', "雪\n\\"]),
+    (np.array([[1, 2], [3, 4]]).T, [[1, 3], [2, 4]]),
+    (np.arange(6)[::2], [0, 2, 4]),
+    (np.empty((0, 2)), []),
+    (np.empty((2, 0)), [[], []]),
+    ([np.int64(1), np.float32(1.5), np.bool_(True), np.str_("雪")], [1, 1.5, True, "雪"]),
+    ([np.array(3), (np.array([4, 5]),)], [3, [[4, 5]]]),
+    (np.array([1, "two", [np.float64(3.5)]], dtype=object), [1, "two", [3.5]]),
+])
+def test_numpy_collection_plan(values, expected):
+    # Capture the JSON request, including conversion of every NumPy element.
+    with patch("pywy.core.core.requests.post") as post:
+        WayangContext().register({JavaPlugin}).load_collection(values).store_textfile("file:///tmp/numpy.txt")
+    post.assert_called_once()
+    actual = post.call_args.kwargs["json"]["operators"][0]["data"]["values"]
+    assert json.dumps(actual, allow_nan=False) == json.dumps(expected, allow_nan=False)
+
+
+def test_numpy_snapshot():
+    array = np.array([[1, 2], [3, 4]])
+    data = WayangContext().load_collection([array, array])
+    array[:] = 0
+    assert data.operator.values == [[[1, 2], [3, 4]], [[1, 2], [3, 4]]]
+
+
+@pytest.mark.parametrize("values", [np.int64(1), np.array(1)])
+def test_reject_scalar_collection(values):
+    with pytest.raises(TypeError, match="load_collection expects"):
+        WayangContext().load_collection(values)
+
+
+@pytest.mark.parametrize("value", [
+    np.complex64(1j), np.bytes_(b"bytes"), np.datetime64(1, "ns"),
+    np.timedelta64(1, "ns"), np.array([np.datetime64(1, "ns")]),
+    np.array([1j]), np.array([], dtype=complex),
+    np.array([("a", 1)], dtype=[("name", "U1"), ("value", "i4")]),
+    np.ma.array([1, 2], mask=[False, True]),
+])
+def test_reject_unsupported_numpy_values(value):
+    with pytest.raises(TypeError, match=r"collection\[0\]: unsupported"):
+        WayangContext().load_collection([value])
+
+
+@pytest.mark.parametrize("value", [
+    np.uint64(2 ** 63), np.float32("nan"), np.float64("inf"),
+    np.array([np.uint64(2 ** 63)]), np.array([float("-inf")]),
+])
+def test_reject_out_of_range_numpy_values(value):
+    with pytest.raises(ValueError, match=r"collection\[0\]"):
+        WayangContext().load_collection([value])
+
+
+@pytest.mark.parametrize("shape", [(1,), ()])
+def test_reject_numpy_object_cycles(shape):
+    array = np.empty(shape, dtype=object)
+    array.flat[0] = array
+    with pytest.raises(ValueError, match="cyclic"):
+        WayangContext().load_collection([array])
+
+
+def test_reject_extended_precision_numpy_values():
+    if np.dtype(np.longdouble).itemsize <= 8:
+        pytest.skip("longdouble has no additional precision on this platform")
+    for value in (np.longdouble(1), np.array([1], dtype=np.longdouble)):
+        with pytest.raises(TypeError, match="unsupported"):
+            WayangContext().load_collection([value])
