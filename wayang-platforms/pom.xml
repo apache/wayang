@@ -47,6 +47,7 @@
         <module>wayang-presto</module>
         <module>wayang-trino</module>
         <module>wayang-duckdb</module>
+        <module>wayang-clickhouse</module>
         <module>wayang-tensorflow</module>
         <module>wayang-semantic</module>
     </modules>

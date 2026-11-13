@@ -79,6 +79,7 @@ particular application are listed here.
 ## SQL Platform Examples
 
 - [BigQuery](bigquery.md)
+- [ClickHouse](clickhouse.md)
 - [DuckDB](duckdb.md)
 - [Presto](presto.md)
 - [Trino](trino.md)
