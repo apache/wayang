@@ -20,7 +20,12 @@ package org.apache.wayang.clickhouse.operators;
 
 import org.apache.wayang.clickhouse.ClickHouse;
 import org.apache.wayang.clickhouse.mapping.FilterMapping;
+import org.apache.wayang.clickhouse.mapping.GlobalReduceMapping;
+import org.apache.wayang.clickhouse.mapping.JoinMapping;
 import org.apache.wayang.clickhouse.mapping.ProjectionMapping;
+import org.apache.wayang.clickhouse.mapping.ReduceByMapping;
+import org.apache.wayang.clickhouse.mapping.SortMapping;
+import org.apache.wayang.clickhouse.mapping.TableSinkMapping;
 import org.apache.wayang.clickhouse.platform.ClickHousePlatform;
 import org.apache.wayang.core.mapping.Mapping;
 import org.apache.wayang.java.platform.JavaPlatform;
@@ -43,9 +48,14 @@ class ClickHousePluginTest {
         assertEquals(2, ClickHouse.plugin().getChannelConversions().size());
 
         Collection<Mapping> mappings = ClickHouse.plugin().getMappings();
-        assertEquals(2, mappings.size());
+        assertEquals(7, mappings.size());
         assertTrue(mappings.stream().anyMatch(FilterMapping.class::isInstance));
         assertTrue(mappings.stream().anyMatch(ProjectionMapping.class::isInstance));
+        assertTrue(mappings.stream().anyMatch(JoinMapping.class::isInstance));
+        assertTrue(mappings.stream().anyMatch(GlobalReduceMapping.class::isInstance));
+        assertTrue(mappings.stream().anyMatch(ReduceByMapping.class::isInstance));
+        assertTrue(mappings.stream().anyMatch(SortMapping.class::isInstance));
+        assertTrue(mappings.stream().anyMatch(TableSinkMapping.class::isInstance));
     }
 
     @Test
