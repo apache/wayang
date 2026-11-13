@@ -35,7 +35,7 @@
 
     <properties>
         <java-module-name>org.apache.wayang.platform.clickhouse</java-module-name>
-        <clickhouse.version>0.9.0</clickhouse.version>
+        <clickhouse.version>0.11.1</clickhouse.version>
     </properties>
 
     <dependencies>
@@ -44,6 +44,14 @@
             <artifactId>clickhouse-jdbc</artifactId>
             <version>${clickhouse.version}</version>
             <classifier>all</classifier>
+            <!-- The shaded jar already bundles (and relocates) the driver's own
+                 dependencies; do not pull them in a second time. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.wayang</groupId>

@@ -121,7 +121,7 @@ class ClickHouseOperatorsIT {
             // numbers(9999) yields 0..9998; offset by 1 to mirror Trino's sequence(1,9999).
             st.execute("INSERT INTO " + ORDERS
                     + " SELECT order_id + ((number + 1) * 10), customer_id, region, amount"
-                    + " FROM " + ORDERS + " CROSS JOIN numbers(9999)");
+                    + " FROM " + ORDERS + " CROSS JOIN numbers(9999) AS n");
             st.execute("INSERT INTO " + ORDERS
                     + " SELECT order_id + 600000, customer_id, region, amount"
                     + " FROM " + ORDERS);
@@ -535,9 +535,9 @@ class ClickHouseOperatorsIT {
     private static Connection jdbc() throws Exception {
         Properties p = new Properties();
         p.setProperty("user", USER);
-        if (PASSWORD != null && !PASSWORD.isEmpty()) {
-            p.setProperty("password", PASSWORD);
-        }
+        // clickhouse-jdbc 0.9.x refuses to connect unless a password property is
+        // present, even an empty one for the passwordless default user.
+        p.setProperty("password", PASSWORD);
         return DriverManager.getConnection(JDBC_URL, p);
     }
 }
