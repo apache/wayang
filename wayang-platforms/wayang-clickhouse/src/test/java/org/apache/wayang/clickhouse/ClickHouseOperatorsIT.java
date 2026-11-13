@@ -101,9 +101,19 @@ class ClickHouseOperatorsIT {
     private static boolean clickHouseAvailable = false;
 
     @BeforeAll
-    static void setUp() {
-        try (Connection c = jdbc()) {
-            Statement st = c.createStatement();
+    static void setUp() throws Exception {
+        // Only an unreachable server skips the class. Once connected, a failing
+        // fixture statement is a real error and must fail the run.
+        try (Connection c = jdbc(); Statement st = c.createStatement()) {
+            st.execute("SELECT 1");
+        } catch (Exception e) {
+            System.err.println("[ClickHouseOperatorsIT] ClickHouse not available ("
+                    + e.getMessage() + ") — skipping.");
+            return;
+        }
+        clickHouseAvailable = true;
+
+        try (Connection c = jdbc(); Statement st = c.createStatement()) {
             st.execute("CREATE DATABASE IF NOT EXISTS " + DATABASE);
 
             st.execute("DROP TABLE IF EXISTS " + ORDERS);
@@ -135,12 +145,8 @@ class ClickHouseOperatorsIT {
                     + "(101, 'Globex', 'SILVER'),"
                     + "(102, 'Initech','BRONZE')");
 
-            clickHouseAvailable = true;
             System.out.println("[ClickHouseOperatorsIT] Connected at " + JDBC_URL
                     + " — fixtures created.");
-        } catch (Exception e) {
-            System.err.println("[ClickHouseOperatorsIT] ClickHouse not available ("
-                    + e.getMessage() + ") — skipping.");
         }
     }
 
