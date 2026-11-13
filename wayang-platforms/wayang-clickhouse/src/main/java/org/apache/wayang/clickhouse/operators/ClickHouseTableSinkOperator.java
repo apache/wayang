@@ -29,9 +29,10 @@ import java.sql.Connection;
  * ClickHouse implementation of the {@link JdbcTableSinkOperator}.
  *
  * <p>ClickHouse requires an {@code ENGINE} clause for {@code CREATE TABLE ... AS
- * SELECT}. The default is {@value #DEFAULT_ENGINE}; override via the
- * {@code engine} constructor argument or the
- * {@code wayang.clickhouse.tablesink.engine} property when constructing the sink.
+ * SELECT}. The default is {@value #DEFAULT_ENGINE}. Override via the
+ * {@code engine} constructor argument, or by setting {@link #ENGINE_PROPERTY}
+ * on the logical {@link TableSink}'s {@link java.util.Properties} (for example
+ * the props passed to {@code writeTable(...)}).
  */
 public class ClickHouseTableSinkOperator extends JdbcTableSinkOperator implements ClickHouseExecutionOperator {
 
@@ -52,11 +53,20 @@ public class ClickHouseTableSinkOperator extends JdbcTableSinkOperator implement
 
     public ClickHouseTableSinkOperator(TableSink<Record> that) {
         super(that);
-        this.engine = engineFrom(that);
+        if (that instanceof ClickHouseTableSinkOperator) {
+            this.engine = ((ClickHouseTableSinkOperator) that).engine;
+        } else {
+            this.engine = engineFrom(that);
+        }
     }
 
     public String getEngine() {
         return this.engine;
+    }
+
+    @Override
+    protected ClickHouseTableSinkOperator createCopy() {
+        return new ClickHouseTableSinkOperator(this);
     }
 
     @Override

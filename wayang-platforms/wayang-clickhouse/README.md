@@ -15,8 +15,6 @@ Configure the endpoint and credentials in a Wayang properties file:
 wayang.clickhouse.jdbc.url = jdbc:clickhouse://clickhouse.example.com:8123/default
 wayang.clickhouse.jdbc.user = default
 wayang.clickhouse.jdbc.password =
-# Optional ENGINE clause for CREATE TABLE ... AS SELECT (overwrite sinks)
-wayang.clickhouse.tablesink.engine = MergeTree ORDER BY tuple()
 ```
 
 The runnable filter/projection example and its table requirements are documented
@@ -25,12 +23,17 @@ in [`wayang-applications/clickhouse.md`](../../wayang-applications/clickhouse.md
 ## Notes
 
 - Table sinks in `overwrite` mode emit
-  `CREATE TABLE <t> ENGINE = <engine> AS SELECT ...` because ClickHouse requires
-  an engine. Override the engine via `wayang.clickhouse.tablesink.engine` or the
-  same key on the `TableSink` `Properties`.
+  `CREATE TABLE <t> ENGINE = MergeTree ORDER BY tuple() AS SELECT ...` because
+  ClickHouse requires an engine. Override per sink by putting
+  `wayang.clickhouse.tablesink.engine` on the `TableSink` / `writeTable`
+  `Properties` (not the JDBC connection properties above).
 - ClickHouse identifiers are case-sensitive. Prefer `database.table` names.
 - Joins build the hash table from the right input; nullable join behaviour
   follows the server's `join_use_nulls` setting (default `0`).
+- JDBC types such as `UInt64`, `Date`/`DateTime`, `Nullable(T)`, and
+  `LowCardinality(String)` are returned via `ResultSet.getObject` into
+  Wayang `Record`s as the driver provides them.
+
 
 ## Integration tests
 

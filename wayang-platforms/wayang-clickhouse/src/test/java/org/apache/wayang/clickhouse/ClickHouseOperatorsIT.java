@@ -118,9 +118,10 @@ class ClickHouseOperatorsIT {
                     + "(5, 101, 'EMEA', 1100.0),"
                     + "(6, 100, 'AMER',  950.25)");
             // Scale to 120000 rows so the optimizer prefers SQL pushdown.
+            // numbers(9999) yields 0..9998; offset by 1 to mirror Trino's sequence(1,9999).
             st.execute("INSERT INTO " + ORDERS
-                    + " SELECT order_id + (n * 10), customer_id, region, amount"
-                    + " FROM " + ORDERS + " ARRAY JOIN range(1, 10000) AS n");
+                    + " SELECT order_id + ((number + 1) * 10), customer_id, region, amount"
+                    + " FROM " + ORDERS + " CROSS JOIN numbers(9999)");
             st.execute("INSERT INTO " + ORDERS
                     + " SELECT order_id + 600000, customer_id, region, amount"
                     + " FROM " + ORDERS);

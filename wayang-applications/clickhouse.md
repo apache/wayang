@@ -64,6 +64,10 @@ wayang.clickhouse.demo.table = default.orders
 
 Change the endpoint, credentials, database, and table for your deployment.
 
+To override the table-sink ENGINE for `writeTable(..., "overwrite", ...)`, put
+`wayang.clickhouse.tablesink.engine` on the `Properties` argument (default is
+`MergeTree ORDER BY tuple()`).
+
 ## Build and run
 
 Build the application and its dependencies from the repository root:
