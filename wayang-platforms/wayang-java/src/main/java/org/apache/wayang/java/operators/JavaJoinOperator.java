@@ -107,10 +107,9 @@ public class JavaJoinOperator<InputType0, InputType1, KeyType>
                 cardinalityEstimate1 != null &&
                 cardinalityEstimate0.getGeometricMeanEstimate() <= cardinalityEstimate1.getGeometricMeanEstimate();
 
+        // Input cardinalities estimate records, not distinct keys. Let the probe table grow with the keys.
         if (isMaterialize0) {
-            final int expectedNumElements =
-                    (int) cardinalityEstimate0.getGeometricMeanEstimate();
-            Map<KeyType, Collection<InputType0>> probeTable = new HashMap<>(expectedNumElements);
+            Map<KeyType, Collection<InputType0>> probeTable = new HashMap<>();
             ((JavaChannelInstance) inputs[0]).<InputType0>provideStream().forEach(dataQuantum0 ->
                     probeTable.compute(keyExtractor0.apply(dataQuantum0),
                             (key, value) -> {
@@ -127,10 +126,7 @@ public class JavaJoinOperator<InputType0, InputType1, KeyType>
             indexingExecutionLineageNode.collectAndMark(executionLineageNodes, producedChannelInstances);
             probingExecutionLineageNode.addPredecessor(inputs[1].getLineage());
         } else {
-            final int expectedNumElements = cardinalityEstimate1 == null ?
-                    1000 :
-                    (int) cardinalityEstimate1.getGeometricMeanEstimate();
-            Map<KeyType, Collection<InputType1>> probeTable = new HashMap<>(expectedNumElements);
+            Map<KeyType, Collection<InputType1>> probeTable = new HashMap<>();
             ((JavaChannelInstance) inputs[1]).<InputType1>provideStream().forEach(dataQuantum1 ->
                     probeTable.compute(keyExtractor1.apply(dataQuantum1),
                             (key, value) -> {
