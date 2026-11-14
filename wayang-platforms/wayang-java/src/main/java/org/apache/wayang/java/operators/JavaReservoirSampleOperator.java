@@ -81,7 +81,7 @@ public class JavaReservoirSampleOperator<Type>
 
         int sampleSize = this.getSampleSize(operatorContext);
 
-        if (sampleSize >= datasetSize) { //return all
+        if (this.isDataSetSizeKnown() && sampleSize >= datasetSize) { //return all
             ((CollectionChannel.Instance) outputs[0]).accept(((JavaChannelInstance) inputs[0]).provideStream().collect(Collectors.toList()));
         }
         else {
