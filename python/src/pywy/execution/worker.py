@@ -89,7 +89,7 @@ def dump_stream(iterator, stream):
         for obj in iterator:
             if type(obj) is str:
                 write_with_length(obj, stream)
-            if type(obj) is bool:
+            elif type(obj) is bool:
                 write_with_length(int(obj == True), stream)
             else:
                 write_with_length(obj, stream)
