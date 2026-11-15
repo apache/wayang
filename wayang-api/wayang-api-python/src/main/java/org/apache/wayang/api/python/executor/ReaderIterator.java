@@ -66,7 +66,7 @@ public class ReaderIterator<Output> implements Iterator<Output> {
         try {
             final int length = this.stream.readInt();
 
-            if (length > 0) {
+            if (length >= 0) {
                 final byte[] obj = new byte[length];
                 stream.readFully(obj);
                 final String s = new String(obj, StandardCharsets.UTF_8);
