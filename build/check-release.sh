@@ -42,7 +42,6 @@ echo "" ; echo ""
 echo "============================================================================================="
 echo "==============     Download files                                      ======================"
 echo "============================================================================================="
-wget ${URL}/${VERSION}/${RC}/DISCLAIMER &>/dev/null
 wget ${URL}/${VERSION}/${RC}/LICENSE &>/dev/null
 wget ${URL}/${VERSION}/${RC}/NOTICE &>/dev/null
 wget ${URL}/${VERSION}/${RC}/README.md &>/dev/null

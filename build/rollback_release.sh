@@ -51,7 +51,6 @@ mkdir ${RC_NEW}
 cp target/checkout/target/${NAME_SRC_EXT} ${RC_NEW}/
 cp target/checkout/target/${NAME_SRC_EXT}.asc ${RC_NEW}/
 cp target/checkout/target/${NAME_SRC_EXT}.sha512 ${RC_NEW}/
-#cp target/checkout/DISCLAIMER ${RC_NEW}/
 #cp target/checkout/LICENSE ${RC_NEW}/
 #cp target/checkout/NOTICE ${RC_NEW}/
 cp target/checkout/RELEASE_NOTES ${RC_NEW}/

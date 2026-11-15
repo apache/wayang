@@ -36,7 +36,7 @@ Important: before making a Pull Request make sure all modules compile and all te
 Before executing your code, make sure the required environment variables are set correctly (see [tutorial.md](tutorial.md))
 ```shell
 cd wayang-assembly/target/
-tar -xvf apache-wayang-assembly-1.0.1-SNAPSHOT-incubating-dist.tar.gz
+tar -xvf apache-wayang-assembly-1.0.1-SNAPSHOT-dist.tar.gz
 cd wayang-1.0.1-SNAPSHOT
 ./bin/wayang-submit org.apache.wayang.<main_class> <parameters>
 ```
