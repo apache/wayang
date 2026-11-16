@@ -131,31 +131,31 @@
     <dependency>
         <groupId>dev.zio</groupId>
         <artifactId>zio-http_2.12</artifactId>
-        <version>3.0.0-RC5</version>
+        <version>3.0.1</version>
     </dependency>
 
     <dependency>
         <groupId>dev.zio</groupId>
         <artifactId>zio-schema_2.12</artifactId>
-        <version>0.4.17</version>
+        <version>1.4.1</version>
     </dependency>
 
     <dependency>
         <groupId>dev.zio</groupId>
         <artifactId>zio-schema-json_2.12</artifactId>
-        <version>0.4.17</version>
+        <version>1.4.1</version>
     </dependency>
 
     <dependency>
         <groupId>dev.zio</groupId>
         <artifactId>zio-schema-protobuf_2.12</artifactId>
-        <version>0.4.17</version>
+        <version>1.4.1</version>
     </dependency>
 
     <dependency>
         <groupId>dev.zio</groupId>
         <artifactId>zio-json_2.12</artifactId>
-        <version>0.6.2</version>
+        <version>0.7.2</version>
     </dependency>
 
   </dependencies>
