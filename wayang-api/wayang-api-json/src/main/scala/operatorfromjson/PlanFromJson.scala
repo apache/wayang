@@ -24,7 +24,8 @@ import com.fasterxml.jackson.databind.node.{ArrayNode, ObjectNode}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 class PlanFromJson(val context: ContextFromJson,
-                   val operators: List[OperatorFromJson]
+                   val operators: List[OperatorFromJson],
+                   val collect: Boolean = false
                    ) extends Serializable {
 
   private def getJsonMapper: JsonMapper = {

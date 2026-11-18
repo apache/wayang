@@ -18,7 +18,11 @@
 package org.apache.wayang.api.json.operatorfromjson.input
 
 import com.fasterxml.jackson.annotation.JsonTypeName
+import com.fasterxml.jackson.databind.JsonNode
 import org.apache.wayang.api.json.operatorfromjson.OperatorFromJson
+import org.apache.wayang.api.json.parserutil.SerializableIterable
+
+import scala.collection.JavaConverters._
 
 @JsonTypeName(OperatorFromJson.OperatorNames.InputCollection)
 case class InputCollectionFromJson(override val id: Long,
@@ -32,7 +36,35 @@ case class InputCollectionFromJson(override val id: Long,
 }
 
 object InputCollectionFromJson {
-  case class Data(udf: String)
-}
+  case class Data(udf: String = null, values: JsonNode = null) {
+    def collection: Iterable[Any] = {
+      require((udf != null) != (values != null),
+        "inputCollection requires exactly one of data.udf or data.values")
+      if (values == null) return SerializableIterable.create(udf).get
 
+      require(values.isArray, "inputCollection data.values must be an array")
+      values.elements().asScala.map(readValue).toVector
+    }
+  }
+
+  // Use serializable JVM values, not Jackson nodes or generated Scala code.
+  private def readValue(value: JsonNode): Any = {
+    if (value.isTextual) value.textValue()
+    else if (value.isBoolean) value.booleanValue()
+    else if (value.isIntegralNumber) {
+      require(value.canConvertToLong, "inputCollection integers must fit in signed 64 bits")
+      value.longValue()
+    } else if (value.isFloatingPointNumber) {
+      val number = value.doubleValue()
+      require(!number.isNaN && !number.isInfinity, "inputCollection floats must be finite")
+      number
+    } else if (value.isArray) {
+      val result = new java.util.ArrayList[Any]()
+      value.elements().asScala.foreach(item => result.add(readValue(item)))
+      result
+    } else {
+      throw new IllegalArgumentException(s"Unsupported inputCollection value: $value")
+    }
+  }
+}
 

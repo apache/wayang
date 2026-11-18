@@ -16,6 +16,10 @@
 #
 
 
+class JsonRecord(bytes):
+    """An encoded collect record, distinct from a legacy UDF returning bytes."""
+
+
 class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
