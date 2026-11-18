@@ -19,18 +19,29 @@
 package org.apache.wayang.api.sql.calcite.converter.functions;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.calcite.rel.RelFieldCollation.Direction;
+import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.function.FunctionDescriptor;
 
 public class SortKeyExtractor implements FunctionDescriptor.SerializableFunction<Record, Record> {
     final List<Direction> directions;
+    final List<NullDirection> nullDirections;
     final List<Integer> collationIndexes;
 
     public SortKeyExtractor(final List<Direction> collationDirections, final List<Integer> collationIndexes) {
+        this(collationDirections,
+                collationDirections.stream().map(Direction::defaultNullDirection).collect(Collectors.toList()),
+                collationIndexes);
+    }
+
+    public SortKeyExtractor(final List<Direction> collationDirections, final List<NullDirection> nullDirections,
+            final List<Integer> collationIndexes) {
         this.directions = collationDirections;
+        this.nullDirections = nullDirections;
         this.collationIndexes = collationIndexes;
     }
 
@@ -45,7 +56,14 @@ public class SortKeyExtractor implements FunctionDescriptor.SerializableFunction
                     final Direction direction = directions.get(i);
                     final Comparable thisField = (Comparable) this.getValues()[i];
                     final Comparable thatField = (Comparable) that.getValues()[i];
-    
+
+                    // NULLS FIRST / NULLS LAST places nulls regardless of the sort direction
+                    if (thisField == null || thatField == null) {
+                        if (thisField == thatField) continue;
+                        final boolean nullsFirst = nullDirections.get(i) == NullDirection.FIRST;
+                        return (thisField == null) == nullsFirst ? -1 : 1;
+                    }
+
                     // == 0, < -1, > 1
                     final int comparison = direction.isDescending() ? -thisField.compareTo(thatField) : thisField.compareTo(thatField);
                     

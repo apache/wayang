@@ -599,6 +599,56 @@ class SqlToWayangRelTest {
     }
 
     @Test
+    void javaSortWithNullsAscending() throws Exception {
+        final SqlContext sqlContext = createSqlContext("/data/exampleNull.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col1, col2 FROM fs.exampleNull ORDER BY col1");
+
+        final Collection<Record> r = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        sqlContext.execute(wayangPlan);
+
+        // ascending order puts nulls last by default
+        assertEquals(Arrays.asList(new Record(1, "a"), new Record(3, "c"), new Record(null, "b")),
+                new ArrayList<>(r));
+    }
+
+    @Test
+    void javaSortWithNullsDescending() throws Exception {
+        final SqlContext sqlContext = createSqlContext("/data/exampleNull.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col1, col2 FROM fs.exampleNull ORDER BY col1 DESC");
+
+        final Collection<Record> r = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        sqlContext.execute(wayangPlan);
+
+        // descending order puts nulls first by default
+        assertEquals(Arrays.asList(new Record(null, "b"), new Record(3, "c"), new Record(1, "a")),
+                new ArrayList<>(r));
+    }
+
+    @Test
+    void javaSortWithNullsFirst() throws Exception {
+        final SqlContext sqlContext = createSqlContext("/data/exampleNull.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col1, col2 FROM fs.exampleNull ORDER BY col1 NULLS FIRST");
+
+        final Collection<Record> r = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        sqlContext.execute(wayangPlan);
+
+        assertEquals(Arrays.asList(new Record(null, "b"), new Record(1, "a"), new Record(3, "c")),
+                new ArrayList<>(r));
+    }
+
+    @Test
     void joinWithLargeLeftTableIndexCorrect() throws Exception {
         final SqlContext sqlContext = createSqlContext("/data/largeLeftTableIndex.csv");
 

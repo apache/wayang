@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
+import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 
@@ -61,6 +62,12 @@ public class WayangSortVisitor extends WayangRelNodeVisitor<WayangSort> {
                 .map(fieldCol -> fieldCol.getDirection())
                 .collect(Collectors.toList());
 
+        final List<NullDirection> nullDirections = collation.getFieldCollations().stream()
+                .map(fieldCol -> fieldCol.nullDirection == NullDirection.UNSPECIFIED
+                        ? fieldCol.getDirection().defaultNullDirection()
+                        : fieldCol.nullDirection)
+                .collect(Collectors.toList());
+
         final List<Integer> collationIndexes = collation.getFieldCollations().stream()
                 .map(fieldCol -> fieldCol.getFieldIndex())
                 .collect(Collectors.toList());
@@ -68,6 +75,7 @@ public class WayangSortVisitor extends WayangRelNodeVisitor<WayangSort> {
         final TransformationDescriptor<Record, Record> td = new TransformationDescriptor<Record, Record>(
                 new SortKeyExtractor(
                         collationDirections,
+                        nullDirections,
                         collationIndexes),
                 Record.class, Record.class);
 
