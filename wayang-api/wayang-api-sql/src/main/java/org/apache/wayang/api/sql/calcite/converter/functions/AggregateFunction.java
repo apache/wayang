@@ -19,7 +19,6 @@ package org.apache.wayang.api.sql.calcite.converter.functions;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.BiFunction;
 
 import org.apache.calcite.rel.core.AggregateCall;
@@ -42,7 +41,6 @@ public class AggregateFunction
     public Record apply(final Record record1, final Record record2) {
         final int l = record1.size();
         final Object[] resValues = new Object[l];
-        boolean countDone = false;
 
         for (int i = 0; i < l - aggregateKinds.size() - 1; i++) {
             resValues[i] = record1.getField(i);
@@ -75,14 +73,12 @@ public class AggregateFunction
                     resValues[counter] = count;
                     break;
                 case AVG:
-                    final Object avg = this.castAndMap(field1, field2, null, Long::sum, Integer::sum, Double::sum, BigDecimal::add);
-
-                    resValues[counter] = avg;
-
-                    if (!countDone) {
-                        resValues[l - 1] = record1.getInt(l - 1) + record2.getInt(l - 1);
-                        countDone = true;
-                    }
+                    // running sum and number of non-null values, see AggregateAddCols
+                    final Object[] avg1 = (Object[]) field1;
+                    final Object[] avg2 = (Object[]) field2;
+                    resValues[counter] = new Object[] {
+                            this.castAndMap(avg1[0], avg2[0], null, Long::sum, Integer::sum, Double::sum, BigDecimal::add),
+                            (Integer) avg1[1] + (Integer) avg2[1] };
                     break;
                 default:
                     throw new IllegalStateException("Unsupported operation: " + kind);
@@ -110,26 +106,22 @@ public class AggregateFunction
             final BiFunction<Integer, Integer, Object> integerMap,
             final BiFunction<Double, Double, Object> doubleMap,
             final BiFunction<BigDecimal, BigDecimal, Object> bigDecimalMap) {
-        // support operations between null and any
-        // class
-        if ((a == null || b == null) || (a.getClass() == b.getClass())) {
-            // objects can be null in this if statement due to
-            // condition above
-            final Optional<Object> aWrapped = Optional.ofNullable(a);
-            final Optional<Object> bWrapped = Optional.ofNullable(b);
-
-            // force .getClass() to be safe so
-            // we can pass null objects to
-            // .apply methods.
-            return switch (aWrapped.orElse(bWrapped.orElse("")).getClass().getSimpleName()) {
+        // SQL aggregates skip null values, so a null on one side keeps the other side
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        if (a.getClass() == b.getClass()) {
+            return switch (a.getClass().getSimpleName()) {
                 case "String" -> stringMap.apply((String) a, (String) b);
                 case "Long" -> longMap.apply((Long) a, (Long) b);
                 case "Integer" -> integerMap.apply((Integer) a, (Integer) b);
                 case "Double" -> doubleMap.apply((Double) a, (Double) b);
                 case "BigDecimal" -> bigDecimalMap.apply((BigDecimal) a, (BigDecimal) b);
                 default -> throw new IllegalStateException("Unsupported operation between: "
-                        + aWrapped.getClass().toString()
-                        + " and: " + bWrapped.getClass().toString());
+                        + a.getClass().getSimpleName() + " and: " + b.getClass().getSimpleName());
             };
         }
         throw new IllegalStateException("Unsupported operation between: " + a.getClass().getSimpleName() + " and: "

@@ -50,7 +50,13 @@ public class AggregateAddCols implements FunctionDescriptor.SerializableFunction
 
             switch (kind) {
                 case COUNT:
-                    resValues[i] = 1;
+                    // COUNT(*) has no arguments, COUNT(col) only counts rows where col is not null
+                    resValues[i] = argList.stream().allMatch(index -> record.getField(index) != null) ? 1 : 0;
+                    break;
+                case AVG:
+                    // running sum and number of non-null values, divided in AggregateGetResult
+                    final Object value = record.getField(argList.get(0));
+                    resValues[i] = new Object[] { value, value == null ? 0 : 1 };
                     break;
                 default:
                     resValues[i] = record.getField(argList.get(0));
