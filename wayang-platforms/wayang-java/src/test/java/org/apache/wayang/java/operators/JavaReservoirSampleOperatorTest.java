@@ -60,6 +60,33 @@ class JavaReservoirSampleOperatorTest extends JavaExecutionOperatorTestBase {
     }
 
     @Test
+    void testExecutionWithUnknownDatasetSize() {
+        // Prepare test data. The dataset size is deliberately left unknown
+        // (setDatasetSize is never called), which is the normal case for a
+        // reservoir sample over a stream.
+        Stream<Integer> inputStream = Stream.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        final int sampleSize = 5;
+
+        // Build the operator.
+        JavaReservoirSampleOperator<Integer> sampleOperator =
+                new JavaReservoirSampleOperator<>(
+                        iterationNumber -> sampleSize,
+                        DataSetType.createDefaultUnchecked(Integer.class),
+                        iterationNumber -> 42L
+                );
+
+        JavaChannelInstance[] inputs = new JavaChannelInstance[]{createStreamChannelInstance(inputStream)};
+        JavaChannelInstance[] outputs = new JavaChannelInstance[]{createCollectionChannelInstance()};
+
+        // Execute.
+        evaluate(sampleOperator, inputs, outputs);
+
+        // Verify the outcome: a sample of the requested size, not the whole input.
+        final List<Integer> result = outputs[0].<Integer>provideStream().collect(Collectors.toList());
+        assertEquals(sampleSize, result.size());
+    }
+
+    @Test
     void testLargerSampleExecution() {
         // Prepare test data.
         Stream<Integer> inputStream = Stream.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
