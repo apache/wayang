@@ -18,11 +18,18 @@
 
 package org.apache.wayang.basic.operators;
 
+import org.apache.wayang.core.api.Configuration;
 import org.junit.Assert;
 import org.junit.Test;
+import testpayload.LegitimatePayload;
+import testpayload.SubclassPayloadWithHook;
+import testpayload.UnrelatedPayloadWithHook;
 
 import java.io.IOException;
+import java.io.InvalidClassException;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class ObjectFileSerializationTest {
@@ -67,13 +74,513 @@ public class ObjectFileSerializationTest {
         Assert.assertEquals(42, deserialized.value);
     }
 
+    @Test(expected = java.io.InvalidClassException.class)
+    public void legacyDeserializationRejectsDisallowedClass() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean disallowed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{disallowed};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // Deserializing with an unrelated elementType (or null) should be rejected by the filter
+        ObjectFileSerialization.deserializeChunk(
+                bytes,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                String.class);
+    }
+
+    @Test
+    public void legacyDeserializationAllowedViaElementType() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean payload = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{payload};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // When elementType explicitly specifies AtomicBoolean, it should be permitted
+        List<Object> result = ObjectFileSerialization.deserializeChunk(
+                bytes,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                java.util.concurrent.atomic.AtomicBoolean.class);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertTrue(((java.util.concurrent.atomic.AtomicBoolean) result.get(0)).get());
+    }
+
+    @Test
+    public void legacyDeserializationAllowedViaSystemProperty() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean payload = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Object[] chunk = new Object[]{payload};
+
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk,
+                chunk.length,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        String propKey = "wayang.basic.serialization.allowlist";
+        String originalVal = System.getProperty(propKey);
+        try {
+            System.setProperty(propKey, "java.util.concurrent.atomic.**");
+            List<Object> result = ObjectFileSerialization.deserializeChunk(
+                    bytes,
+                    ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION,
+                    String.class);
+            Assert.assertEquals(1, result.size());
+            Assert.assertTrue(((java.util.concurrent.atomic.AtomicBoolean) result.get(0)).get());
+        } finally {
+            if (originalVal != null) {
+                System.setProperty(propKey, originalVal);
+            } else {
+                System.clearProperty(propKey);
+            }
+        }
+    }
+
+    @Test
+    public void legacyDeserializationRejectsCustomNumberSubclass() throws Exception {
+        CustomNumberPayload.hookExecuted = false;
+        CustomNumberPayload payload = new CustomNumberPayload(123);
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // Subclass rejection when expected type is Number.class
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Number.class);
+            Assert.fail("Expected InvalidClassException when elementType is Number.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for Number.class", CustomNumberPayload.hookExecuted);
+
+        // Also rejected when expected type is broad types Object.class, Serializable.class, Comparable.class
+        for (Class<?> broad : new Class<?>[]{Object.class, Serializable.class, Comparable.class}) {
+            try {
+                ObjectFileSerialization.deserializeChunk(
+                        bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, broad);
+                Assert.fail("Expected InvalidClassException when elementType is " + broad.getSimpleName());
+            } catch (java.io.InvalidClassException e) {
+                // Expected
+            }
+            Assert.assertFalse("Custom readObject() hook should not execute for " + broad.getSimpleName(), CustomNumberPayload.hookExecuted);
+        }
+
+        // Also rejected if expected type directly specifies CustomNumberPayload.class
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, CustomNumberPayload.class);
+            Assert.fail("Expected InvalidClassException when elementType is CustomNumberPayload.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for CustomNumberPayload.class", CustomNumberPayload.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationRejectsCustomCollectionSubclass() throws Exception {
+        CustomCollectionPayload.hookExecuted = false;
+        CustomCollectionPayload<String> payload = new CustomCollectionPayload<>();
+        payload.add("item");
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, java.util.Collection.class);
+            Assert.fail("Expected InvalidClassException when elementType is Collection.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for Collection.class", CustomCollectionPayload.hookExecuted);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, java.util.List.class);
+            Assert.fail("Expected InvalidClassException when elementType is List.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for List.class", CustomCollectionPayload.hookExecuted);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, CustomCollectionPayload.class);
+            Assert.fail("Expected InvalidClassException when elementType is CustomCollectionPayload.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for CustomCollectionPayload.class", CustomCollectionPayload.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationRejectsCustomMapSubclass() throws Exception {
+        CustomMapPayload.hookExecuted = false;
+        CustomMapPayload<String, String> payload = new CustomMapPayload<>();
+        payload.put("k", "v");
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, java.util.Map.class);
+            Assert.fail("Expected InvalidClassException when elementType is Map.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for Map.class", CustomMapPayload.hookExecuted);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, CustomMapPayload.class);
+            Assert.fail("Expected InvalidClassException when elementType is CustomMapPayload.class");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom readObject() hook should not execute for CustomMapPayload.class", CustomMapPayload.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationAllowsLegitimatePayload() throws Exception {
+        LegitimatePayload payload = new LegitimatePayload("safe-data");
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        List<Object> result = ObjectFileSerialization.deserializeChunk(
+                bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, LegitimatePayload.class);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals("safe-data", ((LegitimatePayload) result.get(0)).value);
+    }
+
+    @Test
+    public void legacyDeserializationRejectsUnrelatedClassInSamePackage() throws Exception {
+        UnrelatedPayloadWithHook.hookExecuted = false;
+        UnrelatedPayloadWithHook payload = new UnrelatedPayloadWithHook();
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, LegitimatePayload.class);
+            Assert.fail("Expected InvalidClassException when deserializing unrelated class in same package");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Unrelated class in same package must not execute readObject() hook",
+                UnrelatedPayloadWithHook.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationRejectsSubclassOfExpectedPayload() throws Exception {
+        SubclassPayloadWithHook.hookExecuted = false;
+        SubclassPayloadWithHook payload = new SubclassPayloadWithHook("subclass-payload");
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, LegitimatePayload.class);
+            Assert.fail("Expected InvalidClassException when deserializing arbitrary subclass of expected type");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Subclass readObject() hook must not execute",
+                SubclassPayloadWithHook.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationAllowsImmutableCollections() throws Exception {
+        List<String> list = List.of("alpha", "beta");
+        java.util.Set<String> set = java.util.Set.of("gamma", "delta");
+        java.util.Map<String, Integer> map = java.util.Map.of("key1", 10, "key2", 20);
+
+        Object[] chunk = new Object[]{list, set, map};
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                chunk, chunk.length, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        List<Object> result = ObjectFileSerialization.deserializeChunk(
+                bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Object.class);
+
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(list, result.get(0));
+        Assert.assertEquals(set, result.get(1));
+        Assert.assertEquals(map, result.get(2));
+    }
+
+    @Test
+    public void legacyDeserializationRejectsUnrelatedWayangClassWithHook() throws Exception {
+        CustomWayangPayloadWithHook.hookExecuted = false;
+        CustomWayangPayloadWithHook payload = new CustomWayangPayloadWithHook();
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, String.class);
+            Assert.fail("Expected InvalidClassException for arbitrary class in org.apache.wayang");
+        } catch (java.io.InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Arbitrary class in org.apache.wayang must not execute readObject() hook",
+                CustomWayangPayloadWithHook.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationAllowsJava17Record() throws Exception {
+        SampleJavaRecord record = new SampleJavaRecord("record-data", 100);
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{record}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        List<Object> result = ObjectFileSerialization.deserializeChunk(
+                bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, SampleJavaRecord.class);
+        Assert.assertEquals(1, result.size());
+        SampleJavaRecord deserialized = (SampleJavaRecord) result.get(0);
+        Assert.assertEquals("record-data", deserialized.name());
+        Assert.assertEquals(100, deserialized.count());
+    }
+
+    @Test
+    public void legacyDeserializationAllowsObjectAndListDeclaredTypes() throws Exception {
+        byte[] objectBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{"hello", 42}, 2, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        List<Object> objects = ObjectFileSerialization.deserializeChunk(
+                objectBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Object.class);
+        Assert.assertEquals(Arrays.asList("hello", 42), objects);
+
+        List<String> arraysList = Arrays.asList("a", "b");
+        List<String> immutableList = List.of("x", "y");
+        ArrayList<String> arrayList = new ArrayList<>(Arrays.asList("z"));
+        byte[] listBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{arraysList, immutableList, arrayList},
+                3,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        List<Object> lists = ObjectFileSerialization.deserializeChunk(
+                listBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+        Assert.assertEquals(3, lists.size());
+        Assert.assertEquals(arraysList, lists.get(0));
+        Assert.assertEquals(immutableList, lists.get(1));
+        Assert.assertEquals(arrayList, lists.get(2));
+
+        // Broad Object/List expected types must still reject non-allowlisted custom subclasses with hooks
+        CustomCollectionPayload.hookExecuted = false;
+        CustomCollectionPayload<String> badList = new CustomCollectionPayload<>();
+        badList.add("evil");
+        byte[] badListBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{badList}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    badListBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+            Assert.fail("Expected InvalidClassException when deserializing custom List subclass under List.class");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+        Assert.assertFalse("Custom List hook must not execute", CustomCollectionPayload.hookExecuted);
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesDepthLimit() throws Exception {
+        Object shallow = createNestedLists(8);
+        byte[] shallowBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{shallow}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        // Allowed under default limit (100)
+        List<Object> ok = ObjectFileSerialization.deserializeChunk(
+                shallowBytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, List.class);
+        Assert.assertEquals(1, ok.size());
+
+        // Rejected under configured small limit
+        System.setProperty(ObjectFileSerialization.MAX_DEPTH_PROPERTY, "4");
+        try {
+            expectLegacyInvalidClass(shallowBytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_DEPTH_PROPERTY);
+        }
+
+        // Rejected under default depth limit (100) without custom property
+        Object tooDeep = createNestedLists(105);
+        byte[] tooDeepBytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{tooDeep}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+        expectLegacyInvalidClass(tooDeepBytes, List.class);
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesArrayLengthLimit() throws Exception {
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{new int[]{1, 2, 3, 4, 5}},
+                1,
+                ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        System.setProperty(ObjectFileSerialization.MAX_ARRAY_LENGTH_PROPERTY, "3");
+        try {
+            expectLegacyInvalidClass(bytes, int[].class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_ARRAY_LENGTH_PROPERTY);
+        }
+
+        // Crafted byte[] stream declaring Integer.MAX_VALUE length must be rejected under default limit before allocation
+        byte[] forgedStream = forgeOversizedByteArrayStream(Integer.MAX_VALUE);
+        try (java.io.ByteArrayInputStream bis = new java.io.ByteArrayInputStream(forgedStream);
+             java.io.ObjectInputStream ois = new java.io.ObjectInputStream(bis)) {
+            ois.setObjectInputFilter(ObjectFileSerialization.createObjectInputFilter(Object.class));
+            ois.readObject();
+            Assert.fail("Expected InvalidClassException for oversized array header");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+    }
+
+    @Test
+    public void legacyDeserializationEnforcesReferencesAndBytesLimits() throws Exception {
+        ArrayList<StringBuilder> manyRefs = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            manyRefs.add(new StringBuilder("item-" + i));
+        }
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{manyRefs}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        System.setProperty(ObjectFileSerialization.MAX_REFERENCES_PROPERTY, "10");
+        try {
+            expectLegacyInvalidClass(bytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_REFERENCES_PROPERTY);
+        }
+
+        System.setProperty(ObjectFileSerialization.MAX_BYTES_PROPERTY, "32");
+        try {
+            expectLegacyInvalidClass(bytes, List.class);
+        } finally {
+            System.clearProperty(ObjectFileSerialization.MAX_BYTES_PROPERTY);
+        }
+    }
+
+    @Test
+    public void legacyDeserializationUsesWayangConfigurationAllowlist() throws Exception {
+        SerializablePayload payload = new SerializablePayload("cfg-allowed", 77);
+        byte[] bytes = ObjectFileSerialization.serializeChunk(
+                new Object[]{payload}, 1, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION);
+
+        expectLegacyInvalidClass(bytes, Object.class);
+
+        Configuration cfg = Configuration.getDefaultConfiguration();
+        String prev = cfg.getOptionalStringProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY).orElse("");
+        cfg.setProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY, SerializablePayload.class.getName());
+        try {
+            List<Object> result = ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, Object.class);
+            Assert.assertEquals(1, result.size());
+            SerializablePayload deserialized = (SerializablePayload) result.get(0);
+            Assert.assertEquals("cfg-allowed", deserialized.text);
+            Assert.assertEquals(77, deserialized.value);
+        } finally {
+            cfg.setProperty(ObjectFileSerialization.ALLOWLIST_PROPERTY, prev);
+        }
+    }
+
+    private static void expectLegacyInvalidClass(byte[] bytes, Class<?> elementType) throws Exception {
+        try {
+            ObjectFileSerialization.deserializeChunk(
+                    bytes, ObjectFileSerializationMode.LEGACY_JAVA_SERIALIZATION, elementType);
+            Assert.fail("Expected InvalidClassException");
+        } catch (InvalidClassException e) {
+            // Expected
+        }
+    }
+
+    private static ArrayList<Object> createNestedLists(int levels) {
+        ArrayList<Object> current = new ArrayList<>();
+        current.add("leaf");
+        for (int i = 0; i < levels; i++) {
+            ArrayList<Object> parent = new ArrayList<>();
+            parent.add(current);
+            current = parent;
+        }
+        return current;
+    }
+
+    private static byte[] forgeOversizedByteArrayStream(int declaredLength) throws IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos)) {
+            oos.writeObject(new byte[]{1, 2, 3, 4, 5});
+            oos.flush();
+        }
+        byte[] serialized = bos.toByteArray();
+        int lenOffset = serialized.length - 5 - 4;
+        serialized[lenOffset] = (byte) (declaredLength >>> 24);
+        serialized[lenOffset + 1] = (byte) (declaredLength >>> 16);
+        serialized[lenOffset + 2] = (byte) (declaredLength >>> 8);
+        serialized[lenOffset + 3] = (byte) declaredLength;
+        return serialized;
+    }
+
+    public record SampleJavaRecord(String name, int count) implements Serializable {
+        private static final long serialVersionUID = 1L;
+    }
+
+    public static class CustomWayangPayloadWithHook implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public static boolean hookExecuted = false;
+
+        private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+            hookExecuted = true;
+            in.defaultReadObject();
+        }
+    }
+
     private static class SerializablePayload implements Serializable {
+        private static final long serialVersionUID = 1L;
         final String text;
         final int value;
 
         private SerializablePayload(String text, int value) {
             this.text = text;
             this.value = value;
+        }
+    }
+
+    public static class CustomNumberPayload extends Number implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public static boolean hookExecuted = false;
+        private final int val;
+
+        public CustomNumberPayload(int val) {
+            this.val = val;
+        }
+
+        @Override
+        public int intValue() { return val; }
+        @Override
+        public long longValue() { return val; }
+        @Override
+        public float floatValue() { return val; }
+        @Override
+        public double doubleValue() { return val; }
+
+        private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+            hookExecuted = true;
+            in.defaultReadObject();
+        }
+    }
+
+    public static class CustomCollectionPayload<E> extends java.util.ArrayList<E> implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public static boolean hookExecuted = false;
+
+        private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+            hookExecuted = true;
+            in.defaultReadObject();
+        }
+    }
+
+    public static class CustomMapPayload<K, V> extends java.util.HashMap<K, V> implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public static boolean hookExecuted = false;
+
+        private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+            hookExecuted = true;
+            in.defaultReadObject();
         }
     }
 }
