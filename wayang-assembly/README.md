@@ -89,4 +89,6 @@ docker run --rm \
 Additional platform libraries, such as JDBC drivers, can be supplied with
 `WAYANG_EXTRA_CLASSPATH`. A custom Wayang configuration can be mounted at
 `${WAYANG_HOME}/conf/wayang.properties` and activated with `FLAG_WAYANG=true`.
+Logging is configured with Log4j 2: set `FLAG_LOG=true` to load
+`${WAYANG_HOME}/conf/log4j2.properties`, which can be edited or replaced by a mounted file.
 Applications still need to register the platform plugins they use.
