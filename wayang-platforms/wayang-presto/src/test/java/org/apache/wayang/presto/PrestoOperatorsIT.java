@@ -191,7 +191,7 @@ class PrestoOperatorsIT {
 
         assertEquals(120000, queryLong("SELECT count(*) FROM " + SINK_TABLE),
                 "TableSource should return all orders");
-        assertSqlReachedPresto("SELECT * FROM " + ORDERS);
+        assertSqlReachedPresto("SELECT order_id, customer_id, region, amount FROM " + ORDERS);
     }
 
     /** Filter: WHERE region = 'AMER' pushed to Presto. */

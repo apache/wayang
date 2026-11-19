@@ -247,6 +247,52 @@ class JdbcExecutorTest {
     }
 
     @Test
+    void testSelectsDeclaredColumns() {
+        JdbcTableSource tableSource = new HsqldbTableSource("customer", "name", "age");
+        StringBuilder query = JdbcExecutor.createSqlString(
+                mock(JdbcExecutor.class),
+                tableSource,
+                Collections.emptyList(),
+                null,
+                null,
+                null,
+                null,
+                Collections.emptyList());
+        assertEquals("SELECT name, age FROM customer", query.toString());
+    }
+
+    @Test
+    void testKeepsStarWhenColumnNameIsNotAnIdentifier() {
+        JdbcTableSource tableSource = new HsqldbTableSource("places", "ST_AsText(geom)");
+        StringBuilder query = JdbcExecutor.createSqlString(
+                mock(JdbcExecutor.class),
+                tableSource,
+                Collections.emptyList(),
+                null,
+                null,
+                null,
+                null,
+                Collections.emptyList());
+        assertEquals("SELECT * FROM places", query.toString());
+    }
+
+    @Test
+    void testProjectionOverridesSourceColumns() {
+        JdbcTableSource tableSource = new HsqldbTableSource("customer", "name", "age");
+        JdbcProjectionOperator projection = new HsqldbProjectionOperator("name");
+        StringBuilder query = JdbcExecutor.createSqlString(
+                mock(JdbcExecutor.class),
+                tableSource,
+                Collections.emptyList(),
+                projection,
+                null,
+                null,
+                null,
+                Collections.emptyList());
+        assertEquals("SELECT name FROM customer", query.toString());
+    }
+
+    @Test
     void testExecuteWithNoTerminalConsumers() {
         assertQueryWithTerminalConsumers(0);
     }

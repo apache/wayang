@@ -18,6 +18,7 @@
 
 package org.apache.wayang.api.sql.calcite.converter;
 
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import org.apache.wayang.api.sql.calcite.rel.WayangTableScan;
@@ -32,8 +33,8 @@ import org.apache.wayang.postgres.operators.PostgresTableSource;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.operators.TableSource;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 //TODO: create tablesource with column types
 //TODO: support other sources
@@ -64,25 +65,11 @@ public class WayangTableScanVisitor extends WayangRelNodeVisitor<WayangTableScan
                         "Could not initialize calcite model parser from current Wayang configuration");
             }
 
-            final List<CsvType> fieldTypes = wayangRelNode.getRowType().getFieldList().stream()
-                    .map(RelDataTypeField::getType)
-                    .map(type -> {
-                        switch (type.getSqlTypeName()) {
-                            case BOOLEAN: return CsvType.BOOLEAN;
-                            case TINYINT: return CsvType.TINYINT;
-                            case SMALLINT: return CsvType.SMALLINT;
-                            case INTEGER: return CsvType.INTEGER;
-                            case BIGINT: return CsvType.BIGINT;
-                            case FLOAT: return CsvType.FLOAT;
-                            case DOUBLE: return CsvType.DOUBLE;
-                            case DECIMAL: return CsvType.decimal(type.getPrecision(), type.getScale());
-                            case DATE: return CsvType.DATE;
-                            case TIME: return CsvType.TIME;
-                            case TIMESTAMP: return CsvType.TIMESTAMP;
-                            default: return CsvType.STRING;
-                        }
-                    })
-                    .collect(Collectors.toList());
+            final List<RelDataTypeField> allFields = wayangRelNode.getRowType().getFieldList();
+            final List<CsvType> fieldTypes = new ArrayList<>(wayangRelNode.getFields().length);
+            for (int fieldIndex : wayangRelNode.getFields()) {
+                fieldTypes.add(csvType(allFields.get(fieldIndex).getType()));
+            }
 
             final String url = String.format("file:/%s/%s.csv", modelParser.getFsPath(), wayangRelNode.getTableName());
 
@@ -92,7 +79,7 @@ public class WayangTableScanVisitor extends WayangRelNodeVisitor<WayangTableScan
         } else if (wayangRelNode.getTable().getQualifiedName().size() == 1) {
             // we assume that it is coming from a test environement or in memory db.
 
-            return new JdbcTableSource(wayangRelNode.getTable().getQualifiedName().get(0), wayangRelNode.getRowType().getFieldNames().toArray(String[]::new)) {
+            return new JdbcTableSource(wayangRelNode.getTable().getQualifiedName().get(0), wayangRelNode.getColumnNames().toArray(String[]::new)) {
 
                 @Override
                 public JdbcPlatformTemplate getPlatform() {
@@ -102,5 +89,22 @@ public class WayangTableScanVisitor extends WayangRelNodeVisitor<WayangTableScan
         } else
             throw new RuntimeException(
                     "Source not supported, got: " + tableSource + ", expected either postgres or filesystem (fs).");
+    }
+
+    private static CsvType csvType(RelDataType type) {
+        switch (type.getSqlTypeName()) {
+            case BOOLEAN: return CsvType.BOOLEAN;
+            case TINYINT: return CsvType.TINYINT;
+            case SMALLINT: return CsvType.SMALLINT;
+            case INTEGER: return CsvType.INTEGER;
+            case BIGINT: return CsvType.BIGINT;
+            case FLOAT: return CsvType.FLOAT;
+            case DOUBLE: return CsvType.DOUBLE;
+            case DECIMAL: return CsvType.decimal(type.getPrecision(), type.getScale());
+            case DATE: return CsvType.DATE;
+            case TIME: return CsvType.TIME;
+            case TIMESTAMP: return CsvType.TIMESTAMP;
+            default: return CsvType.STRING;
+        }
     }
 }

@@ -33,6 +33,7 @@ import org.apache.wayang.basic.operators.FilterOperator;
 import org.apache.wayang.basic.operators.JoinOperator;
 import org.apache.wayang.basic.operators.SpatialFilterOperator;
 import org.apache.wayang.basic.operators.SpatialJoinOperator;
+import org.apache.wayang.basic.util.SqlIdentifierUtils;
 import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.api.Job;
 import org.apache.wayang.core.api.exception.WayangException;
@@ -58,6 +59,7 @@ import org.apache.wayang.jdbc.operators.JdbcReduceByOperator;
 import org.apache.wayang.jdbc.operators.JdbcSortOperator;
 import org.apache.wayang.jdbc.operators.JdbcSourceOperator;
 import org.apache.wayang.jdbc.operators.JdbcTableSinkOperator;
+import org.apache.wayang.jdbc.operators.JdbcTableSource;
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
 
 /**
@@ -105,6 +107,8 @@ public class JdbcExecutor extends ExecutorTemplate {
                     jdbcExecutor.functionCompiler,
                     configuration
                 );
+            } else if (sourceOp instanceof JdbcTableSource tableSource) {
+                selectClause = selectClauseFor(tableSource);
             } else {
                 selectClause = "*";
             }
@@ -136,6 +140,29 @@ public class JdbcExecutor extends ExecutorTemplate {
         // single-statement JDBC executeQuery and is rejected by strict SQL parsers
         // such as Trino and BigQuery. Postgres/SQLite/HSQLDB accept its absence.
         return sb;
+    }
+
+    /**
+     * Columns declared on the table source become the {@code SELECT} list.
+     * {@link JdbcTableSource#createSqlClause} stays the table name, because it is placed after {@code FROM}.
+     * Names that are not plain identifiers (for example {@code ST_AsText(geom)}) are schema hints, so the
+     * clause stays {@code *}.
+     */
+    private static String selectClauseFor(JdbcTableSource tableOp) {
+        final String[] columnNames = tableOp.getColumnNames();
+        if (columnNames.length == 0 || !arePlainIdentifiers(columnNames)) {
+            return "*";
+        }
+        return String.join(", ", columnNames);
+    }
+
+    private static boolean arePlainIdentifiers(String[] columnNames) {
+        try {
+            SqlIdentifierUtils.validateColumnNames(columnNames);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     /**
