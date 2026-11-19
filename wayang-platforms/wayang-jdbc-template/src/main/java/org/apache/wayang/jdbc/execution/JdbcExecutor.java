@@ -223,9 +223,12 @@ public class JdbcExecutor extends ExecutorTemplate {
         }
 
         for (ExecutionTask task : stage.getAllTasks()) {
-            if (task.getOperator() instanceof JdbcJoinOperator) {
-                final JdbcJoinOperator<?> joinOperator = (JdbcJoinOperator<?>) task.getOperator();
-                final String leftTableName = joinOperator.getKeyDescriptor0().getSqlImplementation().field0;
+            final ExecutionOperator operator = task.getOperator();
+            if (operator instanceof JdbcJoinOperator || operator instanceof SpatialJoinOperator) {
+                final String leftTableName = (operator instanceof JdbcJoinOperator
+                        ? ((JdbcJoinOperator<?>) operator).getKeyDescriptor0()
+                        : ((SpatialJoinOperator<?, ?>) operator).getKeyDescriptor0())
+                        .getSqlImplementation().field0;
                 for (Object startTaskObject : startTasks) {
                     final ExecutionTask startTask = (ExecutionTask) startTaskObject;
                     if (startTask.getOperator() instanceof JdbcSourceOperator) {
