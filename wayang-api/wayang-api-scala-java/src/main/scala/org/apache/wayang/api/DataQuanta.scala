@@ -717,6 +717,22 @@ class DataQuanta[Out: ClassTag](val operator: ElementaryOperator, outputIndex: I
     spatialJoinJava(toSerializableFunction(thisKeyUdf), that, toSerializableFunction(thatKeyUdf), predicateType)
 
   /**
+    * As above, naming the SQL table and column behind each key so the join can be pushed
+    * into the database. See [[spatialJoinJava]].
+    */
+  def spatialJoin[ThatOut: ClassTag](
+      thisKeyUdf: Out => SpatialGeometry,
+      that: DataQuanta[ThatOut],
+      thatKeyUdf: ThatOut => SpatialGeometry,
+      predicateType: SpatialPredicate,
+      thisTable: String,
+      thisColumn: String,
+      thatTable: String,
+      thatColumn: String): DataQuanta[WayangTuple2[Out, ThatOut]] =
+    spatialJoinJava(toSerializableFunction(thisKeyUdf), that, toSerializableFunction(thatKeyUdf),
+      predicateType, thisTable, thisColumn, thatTable, thatColumn)
+
+  /**
     * Feeds this and a further instance into a [[SpatialJoinOperator]].
     *
     * @param thisKeyUdf    UDF to extract spatial geometry from this instance's elements
@@ -729,13 +745,35 @@ class DataQuanta[Out: ClassTag](val operator: ElementaryOperator, outputIndex: I
       thisKeyUdf: SerializableFunction[Out, _ <: SpatialGeometry],
       that: DataQuanta[ThatOut],
       thatKeyUdf: SerializableFunction[ThatOut, _ <: SpatialGeometry],
-      predicateType: SpatialPredicate): DataQuanta[WayangTuple2[Out, ThatOut]] = {
+      predicateType: SpatialPredicate): DataQuanta[WayangTuple2[Out, ThatOut]] =
+    spatialJoinJava(thisKeyUdf, that, thatKeyUdf, predicateType, null, null, null, null)
+
+  /**
+    * As above, but naming the SQL table and geometry column behind each key so that the join
+    * can be pushed into the database. Name either all four or none.
+    */
+  def spatialJoinJava[ThatOut: ClassTag](
+      thisKeyUdf: SerializableFunction[Out, _ <: SpatialGeometry],
+      that: DataQuanta[ThatOut],
+      thatKeyUdf: SerializableFunction[ThatOut, _ <: SpatialGeometry],
+      predicateType: SpatialPredicate,
+      thisTable: String,
+      thisColumn: String,
+      thatTable: String,
+      thatColumn: String): DataQuanta[WayangTuple2[Out, ThatOut]] = {
     require(this.planBuilder eq that.planBuilder, s"$this and $that must use the same plan builders.")
+    val sqlNames = Seq(thisTable, thisColumn, thatTable, thatColumn)
+    require(sqlNames.forall(_ == null) || sqlNames.forall(_ != null),
+      "Name either all or none of thisTable, thisColumn, thatTable and thatColumn.")
     val op = new SpatialJoinOperator(
       new TransformationDescriptor(thisKeyUdf.asInstanceOf[SerializableFunction[Out, SpatialGeometry]], basicDataUnitType[Out], basicDataUnitType[SpatialGeometry]),
       new TransformationDescriptor(thatKeyUdf.asInstanceOf[SerializableFunction[ThatOut, SpatialGeometry]], basicDataUnitType[ThatOut], basicDataUnitType[SpatialGeometry]),
       predicateType
     )
+    if (thisTable != null) {
+      op.getKeyDescriptor0.withSqlImplementation(thisTable, thisColumn)
+      op.getKeyDescriptor1.withSqlImplementation(thatTable, thatColumn)
+    }
     this.connectTo(op, 0)
     that.connectTo(op, 1)
     wrap[WayangTuple2[Out, ThatOut]](op)
@@ -1265,6 +1303,20 @@ class DataQuanta[Out: ClassTag](val operator: ElementaryOperator, outputIndex: I
     this.planBuilder.sinks.clear()
   }
 
+  /**
+    * Write the data quanta in this instance to a GeoJSON file. Triggers execution.
+    *
+    * @param url URL to the GeoJSON file
+    */
+  def writeGeoJsonFile(url: String)(implicit ev: Out =:= Record): Unit = {
+    val _ = ev
+    val sink = new GeoJsonFileSink(url)
+    sink.setName(s"Write GeoJSON to $url")
+    this.connectTo(sink, 0)
+    this.planBuilder.sinks += sink
+    this.planBuilder.buildAndExecute()
+    this.planBuilder.sinks.clear()
+  }
 
   private def writeParquetJava(url: String, overwrite: Boolean, preferDataset: Boolean)(implicit ev: Out =:= Record): Unit = {
     val _ = ev

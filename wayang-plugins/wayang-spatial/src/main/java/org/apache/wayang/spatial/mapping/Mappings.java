@@ -40,7 +40,8 @@ public class Mappings {
     public static Collection<Mapping> javaMappings = Arrays.asList(
             new org.apache.wayang.spatial.mapping.java.SpatialFilterMapping(),
             new org.apache.wayang.spatial.mapping.java.SpatialJoinMapping(),
-            new org.apache.wayang.spatial.mapping.java.GeoJsonFileSourceMapping()
+            new org.apache.wayang.spatial.mapping.java.GeoJsonFileSourceMapping(),
+            new org.apache.wayang.spatial.mapping.java.GeoJsonFileSinkMapping()
     );
 
     /**

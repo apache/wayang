@@ -532,6 +532,16 @@ trait DataQuantaBuilder[+This <: DataQuantaBuilder[_, Out], Out] extends Logging
   def forEach(f: Consumer[Out]): Unit = this.dataQuanta().foreachJava(f)
 
   /**
+    * Feed the built [[DataQuanta]] into a [[org.apache.wayang.basic.operators.GeoJsonFileSink]]. This
+    * triggers execution of the constructed [[WayangPlan]].
+    *
+    * @param url the URL of the file to be written
+    */
+  def writeGeoJsonFile(url: String): Unit =
+    this.withOutputType(DataSetType.createDefault(classOf[Record]).asInstanceOf[DataSetType[Out]])
+      .dataQuanta().asInstanceOf[DataQuanta[Record]].writeGeoJsonFile(url)
+
+  /**
     * Feed the built [[DataQuanta]] into a [[org.apache.wayang.basic.operators.TextFileSink]]. This triggers
     * execution of the constructed [[WayangPlan]].
     *
@@ -2191,6 +2201,9 @@ class SpatialFilterDataQuantaBuilder[T](inputDataQuanta: DataQuantaBuilder[_, T]
                                        (implicit javaPlanBuilder: JavaPlanBuilder)
   extends BasicDataQuantaBuilder[SpatialFilterDataQuantaBuilder[T], T] {
 
+  // Reuse the input TypeTrap to enforce type equality between input and output.
+  override def getOutputTypeTrap: TypeTrap = inputDataQuanta.outputTypeTrap
+
   private var columnName: String = _
 
   def withSqlGeometryColumnName(columnName: String): SpatialFilterDataQuantaBuilder[T] = {
@@ -2212,11 +2225,33 @@ class SpatialJoinDataQuantaBuilder[In0, In1](inputDataQuanta0: DataQuantaBuilder
                                             (implicit javaPlanBuilder: JavaPlanBuilder)
   extends BasicDataQuantaBuilder[SpatialJoinDataQuantaBuilder[In0, In1], RT2[In0, In1]] {
 
+  private var thisTableName: String = _
+  private var thisColumnName: String = _
+  private var thatTableName: String = _
+  private var thatColumnName: String = _
+
+  /**
+    * Add the SQL table and geometry column of both join keys.
+    *
+    * @return this instance
+    */
+  def withSqlGeometryColumns(thisTableName: String,
+                             thisColumnName: String,
+                             thatTableName: String,
+                             thatColumnName: String): SpatialJoinDataQuantaBuilder[In0, In1] = {
+    this.thisTableName = thisTableName
+    this.thisColumnName = thisColumnName
+    this.thatTableName = thatTableName
+    this.thatColumnName = thatColumnName
+    this
+  }
+
   override protected def build: DataQuanta[RT2[In0, In1]] = {
     val dq0 = inputDataQuanta0.dataQuanta()
     val dq1 = inputDataQuanta1.dataQuanta()
     applyTargetPlatforms(
-      dq0.spatialJoinJava(keyUdf0, dq1, keyUdf1, predicateType)(inputDataQuanta1.classTag),
+      dq0.spatialJoinJava(keyUdf0, dq1, keyUdf1, predicateType,
+        this.thisTableName, this.thisColumnName, this.thatTableName, this.thatColumnName)(inputDataQuanta1.classTag),
       this.getTargetPlatforms()
     )
   }
