@@ -19,9 +19,6 @@
 package org.apache.wayang.jdbc.operators;
 
 import org.apache.logging.log4j.LogManager;
-import org.apache.parquet.schema.LogicalTypeAnnotation;
-import org.apache.parquet.schema.PrimitiveType;
-import org.apache.parquet.schema.Type;
 import org.apache.wayang.basic.operators.ParquetSource;
 import org.apache.wayang.commons.util.profiledb.model.measurement.TimeMeasurement;
 import org.apache.wayang.core.api.Configuration;
@@ -29,6 +26,9 @@ import org.apache.wayang.core.api.exception.WayangException;
 import org.apache.wayang.core.optimizer.OptimizationContext;
 import org.apache.wayang.core.optimizer.cardinality.CardinalityEstimate;
 import org.apache.wayang.jdbc.compiler.FunctionCompiler;
+import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.PrimitiveType;
+import org.apache.parquet.schema.Type;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

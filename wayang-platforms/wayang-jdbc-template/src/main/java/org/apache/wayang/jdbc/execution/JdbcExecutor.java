@@ -18,14 +18,6 @@
 
 package org.apache.wayang.jdbc.execution;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.wayang.basic.data.Tuple2;
@@ -60,20 +52,60 @@ import org.apache.wayang.jdbc.operators.JdbcSourceOperator;
 import org.apache.wayang.jdbc.operators.JdbcTableSinkOperator;
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * {@link Executor} implementation for the {@link JdbcPlatformTemplate}.
  */
 public class JdbcExecutor extends ExecutorTemplate {
-    public static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor, final JdbcSourceOperator sourceOp,
-            final Collection<JdbcExecutionOperator> filterTasks, final JdbcProjectionOperator projectionTask, final JdbcGlobalReduceOperator globalReduceTask, final JdbcReduceByOperator reduceByTask, final JdbcSortOperator sortTask, 
-            final Collection<JdbcExecutionOperator> joinTasks) {
-        return createSqlString(jdbcExecutor, sourceOp, filterTasks, projectionTask, globalReduceTask, reduceByTask,
-                sortTask, joinTasks, null);
+
+    public static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor,
+                                                final JdbcSourceOperator sourceOp,
+                                                final Collection<JdbcExecutionOperator> filterTasks,
+                                                final JdbcProjectionOperator projectionTask,
+                                                final JdbcGlobalReduceOperator globalReduceTask,
+                                                final JdbcReduceByOperator reduceByTask,
+                                                final JdbcSortOperator sortTask,
+                                                final Collection<JdbcExecutionOperator> joinTasks) {
+        return createSqlString(jdbcExecutor, sourceOp, filterTasks, projectionTask, globalReduceTask,
+                reduceByTask, sortTask, joinTasks, null, Map.of());
     }
 
-    public static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor, final JdbcSourceOperator sourceOp,
-            final Collection<JdbcExecutionOperator> filterTasks, final JdbcProjectionOperator projectionTask, final JdbcGlobalReduceOperator globalReduceTask, final JdbcReduceByOperator reduceByTask, final JdbcSortOperator sortTask,
-            final Collection<JdbcExecutionOperator> joinTasks, final Configuration configuration) {
+    public static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor,
+                                                final JdbcSourceOperator sourceOp,
+                                                final Collection<JdbcExecutionOperator> filterTasks,
+                                                final JdbcProjectionOperator projectionTask,
+                                                final JdbcGlobalReduceOperator globalReduceTask,
+                                                final JdbcReduceByOperator reduceByTask,
+                                                final JdbcSortOperator sortTask,
+                                                final Collection<JdbcExecutionOperator> joinTasks,
+                                                final Configuration configuration) {
+        final Map<String, String> sourceNames = Map.of(
+                sourceOp.getSourceName(),
+                sourceOp.getSourceName(configuration)
+        );
+        return createSqlString(jdbcExecutor, sourceOp, filterTasks, projectionTask, globalReduceTask,
+                reduceByTask, sortTask, joinTasks, configuration, sourceNames);
+    }
+
+    private static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor,
+                                                 final JdbcSourceOperator sourceOp,
+                                                 final Collection<JdbcExecutionOperator> filterTasks,
+                                                 final JdbcProjectionOperator projectionTask,
+                                                 final JdbcGlobalReduceOperator globalReduceTask,
+                                                 final JdbcReduceByOperator reduceByTask,
+                                                 final JdbcSortOperator sortTask,
+                                                 final Collection<JdbcExecutionOperator> joinTasks,
+                                                 final Configuration configuration,
+                                                 final Map<String, String> sourceNames) {
         final String sourceName = sourceOp.createSqlClause(
                 jdbcExecutor.connection,
                 jdbcExecutor.functionCompiler,
@@ -83,52 +115,55 @@ public class JdbcExecutor extends ExecutorTemplate {
                 .map(op -> op.createSqlClause(jdbcExecutor.connection, jdbcExecutor.functionCompiler, configuration))
                 .collect(Collectors.toList());
         final Collection<String> joins = joinTasks.stream()
-                .map(op -> op.createSqlClause(jdbcExecutor.connection, jdbcExecutor.functionCompiler, configuration))
+                .map(op -> op instanceof JdbcJoinOperator
+                        ? ((JdbcJoinOperator<?>) op).createSqlClause(
+                                jdbcExecutor.connection,
+                                jdbcExecutor.functionCompiler,
+                                sourceNames
+                        )
+                        : op.createSqlClause(jdbcExecutor.connection, jdbcExecutor.functionCompiler, configuration))
                 .collect(Collectors.toList());
-                
+
         final String selectClause;
-            if (globalReduceTask != null) {
-                selectClause = globalReduceTask.createSqlClause(
+        if (globalReduceTask != null) {
+            selectClause = globalReduceTask.createSqlClause(
                     jdbcExecutor.connection,
                     jdbcExecutor.functionCompiler,
                     configuration
-                );
-            } else if (reduceByTask != null) {
-                selectClause = reduceByTask.createSqlClause(
+            );
+        } else if (reduceByTask != null) {
+            selectClause = reduceByTask.createSqlClause(
                     jdbcExecutor.connection,
                     jdbcExecutor.functionCompiler,
                     configuration
-                );
-            } else if (projectionTask != null) {
-                selectClause = projectionTask.createSqlClause(
+            );
+        } else if (projectionTask != null) {
+            selectClause = projectionTask.createSqlClause(
                     jdbcExecutor.connection,
                     jdbcExecutor.functionCompiler,
                     configuration
-                );
-            } else {
-                selectClause = "*";
-            }
+            );
+        } else {
+            selectClause = "*";
+        }
 
         final StringBuilder sb = new StringBuilder(1000);
         sb.append("SELECT ").append(selectClause).append(" FROM ").append(sourceName);
-        if (!joins.isEmpty()) {
-            final String separator = " ";
-            for (final String join : joins) {
-                sb.append(separator).append(join);
-            }
+        for (final String join : joins) {
+            sb.append(" ").append(join);
         }
         if (!conditions.isEmpty()) {
             sb.append(" WHERE ");
             sb.append(String.join(" AND ", conditions));
         }
         if (reduceByTask != null) {
-            sb.append(" GROUP BY " + reduceByTask.getKeyDescriptor().getSqlImplementation().getField0());
-        }        
+            sb.append(" GROUP BY ").append(reduceByTask.getKeyDescriptor().getSqlImplementation().getField0());
+        }
         if (sortTask != null) {
             sb.append(sortTask.createSqlClause(
-                jdbcExecutor.connection,
-                jdbcExecutor.functionCompiler,
-                configuration
+                    jdbcExecutor.connection,
+                    jdbcExecutor.functionCompiler,
+                    configuration
             ));
         }
 
@@ -139,18 +174,20 @@ public class JdbcExecutor extends ExecutorTemplate {
     }
 
     /**
-     * Creates a query channel and the sql statement
-     * 
-     * @param stage
-     * @param context
-     * @return a tuple containing the sql statement
+     * Creates a query channel and the SQL statement.
+     *
+     * @param stage the JDBC execution stage
+     * @param context provides optimization information and the Wayang configuration
+     * @param jdbcExecutor the executor with the database connection
+     * @return a tuple containing the SQL statement and its output channel
      */
     protected static Tuple2<String, SqlQueryChannel.Instance> createSqlQuery(final ExecutionStage stage,
-            final OptimizationContext context, final JdbcExecutor jdbcExecutor) {
+                                                                             final OptimizationContext context,
+                                                                             final JdbcExecutor jdbcExecutor) {
         final Collection<?> startTasks = stage.getStartTasks();
+        JdbcExecutor.prepareSourceTasks(startTasks, jdbcExecutor, context.getConfiguration());
 
         // Verify that we can handle this instance.
-        JdbcExecutor.prepareSourceTasks(startTasks, jdbcExecutor, context.getConfiguration());
         final ExecutionTask startTask = JdbcExecutor.selectStartTask(startTasks, stage, context.getConfiguration());
         assert startTask.getOperator() instanceof JdbcSourceOperator
                 : "Invalid JDBC stage: Start task has to be a JDBC source";
@@ -177,18 +214,18 @@ public class JdbcExecutor extends ExecutorTemplate {
                 assert projectionTask == null; // Allow one projection operator per stage for now.
                 projectionTask = (JdbcProjectionOperator) operator;
             } else if (operator instanceof final JdbcGlobalReduceOperator globalReduce) {
-                assert globalReduceTask == null; // Allow one projection operator per stage for now.
+                assert globalReduceTask == null; // Allow one global reduce operator per stage for now.
                 globalReduceTask = globalReduce;
             } else if (operator instanceof final JdbcReduceByOperator reduceBy) {
-                assert reduceByTask == null; // Allow one projection operator per stage for now.
+                assert reduceByTask == null; // Allow one reduce-by operator per stage for now.
                 reduceByTask = reduceBy;
             } else if (operator instanceof final JdbcSortOperator sort) {
-                assert sortTask == null; // Allow one projection operator per stage for now.
+                assert sortTask == null; // Allow one sort operator per stage for now.
                 sortTask = sort;
-            } else if (operator instanceof JoinOperator || (operator instanceof SpatialJoinOperator)) {
+            } else if (operator instanceof JoinOperator || operator instanceof SpatialJoinOperator) {
                 joinTasks.add((JdbcExecutionOperator) operator);
             } else {
-                throw new WayangException(String.format("Unsupported JDBC execution task %s", nextTask.toString()));
+                throw new WayangException(String.format("Unsupported JDBC execution task %s", nextTask));
             }
 
             // Move the tipChannelInstance.
@@ -201,20 +238,16 @@ public class JdbcExecutor extends ExecutorTemplate {
 
         // Create the SQL query.
         final StringBuilder query = createSqlString(jdbcExecutor, sourceOp, filterTasks, projectionTask,
-                globalReduceTask, reduceByTask, sortTask, joinTasks, context.getConfiguration());
-        
+                globalReduceTask, reduceByTask, sortTask, joinTasks, context.getConfiguration(),
+                resolveSourceNames(startTasks, context.getConfiguration()));
         return new Tuple2<>(query.toString(), tipChannelInstance);
     }
 
     /**
-     * Selects the table source that belongs on the left-hand side of a JDBC join.
+     * Selects the source that belongs on the left-hand side of a JDBC join.
      * Stage start tasks are not ordered, but {@link JdbcJoinOperator#createSqlClause}
-     * assumes its first key descriptor's table is used in the {@code FROM} clause.
+     * assumes its first key descriptor's source is used in the {@code FROM} clause.
      */
-    private static ExecutionTask selectStartTask(final Collection<?> startTasks, final ExecutionStage stage) {
-        return selectStartTask(startTasks, stage, null);
-    }
-
     private static ExecutionTask selectStartTask(final Collection<?> startTasks,
                                                  final ExecutionStage stage,
                                                  final Configuration configuration) {
@@ -225,13 +258,13 @@ public class JdbcExecutor extends ExecutorTemplate {
         for (ExecutionTask task : stage.getAllTasks()) {
             if (task.getOperator() instanceof JdbcJoinOperator) {
                 final JdbcJoinOperator<?> joinOperator = (JdbcJoinOperator<?>) task.getOperator();
-                final String leftTableName = joinOperator.getKeyDescriptor0().getSqlImplementation().field0;
+                final String leftSourceName = joinOperator.getKeyDescriptor0().getSqlImplementation().field0;
                 for (Object startTaskObject : startTasks) {
                     final ExecutionTask startTask = (ExecutionTask) startTaskObject;
                     if (startTask.getOperator() instanceof JdbcSourceOperator) {
                         final JdbcSourceOperator sourceOperator = (JdbcSourceOperator) startTask.getOperator();
-                        if (sourceOperator.getSourceName().equals(leftTableName)
-                                || sourceOperator.getSourceName(configuration).equals(leftTableName)) {
+                        if (sourceOperator.getSourceName().equals(leftSourceName)
+                                || sourceOperator.getSourceName(configuration).equals(leftSourceName)) {
                             return startTask;
                         }
                     }
@@ -239,7 +272,7 @@ public class JdbcExecutor extends ExecutorTemplate {
             }
         }
 
-        throw new WayangException("Could not determine the left table source for JDBC stage.");
+        throw new WayangException("Could not determine the left source for JDBC stage.");
     }
 
     private static void prepareSourceTasks(final Collection<?> startTasks,
@@ -257,14 +290,30 @@ public class JdbcExecutor extends ExecutorTemplate {
         }
     }
 
+    private static Map<String, String> resolveSourceNames(final Collection<?> startTasks,
+                                                          final Configuration configuration) {
+        final Map<String, String> sourceNames = new HashMap<>();
+        for (Object startTaskObject : startTasks) {
+            final ExecutionTask startTask = (ExecutionTask) startTaskObject;
+            if (startTask.getOperator() instanceof JdbcSourceOperator) {
+                final JdbcSourceOperator sourceOperator = (JdbcSourceOperator) startTask.getOperator();
+                sourceNames.put(
+                        sourceOperator.getSourceName(),
+                        sourceOperator.getSourceName(configuration)
+                );
+            }
+        }
+        return sourceNames;
+    }
+
     /**
      * Handles execution stages that end with a {@link JdbcTableSinkOperator}.
      * Composes a SQL query from the stage's operators and executes it directly on
      * the database connection, keeping all data within the database.
      *
-     * @param stage               the execution stage ending with a sink
+     * @param stage the execution stage ending with a sink
      * @param optimizationContext provides optimization information
-     * @param jdbcExecutor        the executor with the database connection
+     * @param jdbcExecutor the executor with the database connection
      */
     private static long executeSinkStage(final ExecutionStage stage, final OptimizationContext optimizationContext,
             final JdbcExecutor jdbcExecutor) {
@@ -284,7 +333,6 @@ public class JdbcExecutor extends ExecutorTemplate {
         assert termTask.getOperator() instanceof JdbcTableSinkOperator
                 : "Invalid JDBC stage: Terminal task has to be a JdbcTableSinkOperator";
 
-        // Extract operators from the stage
         final JdbcSourceOperator sourceOp = (JdbcSourceOperator) startTask.getOperator();
         final JdbcTableSinkOperator sinkOp = (JdbcTableSinkOperator) termTask.getOperator();
         final Collection<JdbcExecutionOperator> filterTasks = new ArrayList<>(4);
@@ -294,7 +342,6 @@ public class JdbcExecutor extends ExecutorTemplate {
         JdbcSortOperator sortTask = null;
         final Collection<JdbcExecutionOperator> joinTasks = new ArrayList<>();
 
-        // Walk through intermediate operators, stopping at the sink
         ExecutionTask nextTask = JdbcExecutor.findJdbcExecutionOperatorTaskInStage(startTask, stage);
         while (nextTask != null && !(nextTask.getOperator() instanceof JdbcTableSinkOperator)) {
             if (nextTask.getOperator() instanceof final JdbcFilterOperator filterOperator) {
@@ -314,26 +361,20 @@ public class JdbcExecutor extends ExecutorTemplate {
             } else if (nextTask.getOperator() instanceof final JdbcJoinOperator joinOperator) {
                 joinTasks.add(joinOperator);
             } else {
-                throw new WayangException(String.format("Unsupported JDBC execution task %s", nextTask.toString()));
+                throw new WayangException(String.format("Unsupported JDBC execution task %s", nextTask));
             }
             nextTask = JdbcExecutor.findJdbcExecutionOperatorTaskInStage(nextTask, stage);
         }
 
-        // Compose the SELECT query
         final String selectSql = createSqlString(jdbcExecutor, sourceOp, filterTasks, projectionTask,
-                globalReduceTask, reduceByTask, sortTask, joinTasks, optimizationContext.getConfiguration()).toString();
-
-        // Get the sink's SQL clause
+                globalReduceTask, reduceByTask, sortTask, joinTasks, optimizationContext.getConfiguration(),
+                resolveSourceNames(startTasks, optimizationContext.getConfiguration())).toString();
         final String sinkClause = sinkOp.createSqlClause(jdbcExecutor.connection, jdbcExecutor.functionCompiler);
 
-        // Execute on the database
         try (Statement stmt = jdbcExecutor.connection.createStatement()) {
-            // Handle overwrite: drop existing table first
             if ("overwrite".equals(sinkOp.getMode())) {
                 stmt.execute("DROP TABLE IF EXISTS " + sinkOp.getQuotedTableName(jdbcExecutor.connection));
             }
-            // Execute the composed query: CREATE TABLE x AS SELECT ... or INSERT INTO x
-            // SELECT ...
             final String fullSql = sinkClause + " " + selectSql + sinkOp.createSqlSuffix();
             final long startTime = System.currentTimeMillis();
             stmt.execute(fullSql);
@@ -382,7 +423,7 @@ public class JdbcExecutor extends ExecutorTemplate {
      * @return the said follow-up {@link ExecutionTask} or {@code null} if none
      */
     private static ExecutionTask findJdbcExecutionOperatorTaskInStage(final ExecutionTask task,
-            final ExecutionStage stage) {
+                                                                      final ExecutionStage stage) {
         if (task.getNumOuputChannels() != 1) {
             return null;
         }
@@ -407,7 +448,8 @@ public class JdbcExecutor extends ExecutorTemplate {
      * @return the {@link SqlQueryChannel.Instance}
      */
     private static SqlQueryChannel.Instance instantiateOutboundChannel(final ExecutionTask task,
-            final OptimizationContext optimizationContext, final JdbcExecutor jdbcExecutor) {
+                                                                       final OptimizationContext optimizationContext,
+                                                                       final JdbcExecutor jdbcExecutor) {
         assert task.getNumOuputChannels() == 1 : String.format("Illegal task: %s.", task);
         assert task.getOutputChannel(0) instanceof SqlQueryChannel : String.format("Illegal task: %s.", task);
 
@@ -430,8 +472,9 @@ public class JdbcExecutor extends ExecutorTemplate {
      * @return the {@link SqlQueryChannel.Instance}
      */
     private static SqlQueryChannel.Instance instantiateOutboundChannel(final ExecutionTask task,
-            final OptimizationContext optimizationContext, final SqlQueryChannel.Instance predecessorChannelInstance,
-            final JdbcExecutor jdbcExecutor) {
+                                                                       final OptimizationContext optimizationContext,
+                                                                       final SqlQueryChannel.Instance predecessorChannelInstance,
+                                                                       final JdbcExecutor jdbcExecutor) {
         final SqlQueryChannel.Instance newInstance = JdbcExecutor.instantiateOutboundChannel(task, optimizationContext,
                 jdbcExecutor);
         newInstance.getLineage().addPredecessor(predecessorChannelInstance.getLineage());
@@ -454,8 +497,7 @@ public class JdbcExecutor extends ExecutorTemplate {
 
     @Override
     public void execute(final ExecutionStage stage, final OptimizationContext optimizationContext,
-            final ExecutionState executionState) {
-        // Check if this stage ends with a sink operator
+                        final ExecutionState executionState) {
         final Collection<?> termTasks = stage.getTerminalTasks();
         assert termTasks.size() == 1 : "Invalid JDBC stage: multiple terminal tasks are not currently supported.";
         final ExecutionTask termTask = (ExecutionTask) termTasks.toArray()[0];
@@ -472,8 +514,6 @@ public class JdbcExecutor extends ExecutorTemplate {
                 }
             }
         } else {
-            // If it is normal stage: compose SQL and store in channel for downstream
-            // consumption
             final Tuple2<String, SqlQueryChannel.Instance> pair = JdbcExecutor.createSqlQuery(stage,
                     optimizationContext, this);
             final String query = pair.field0;
