@@ -28,7 +28,7 @@ import org.apache.wayang.core.api.{Configuration, WayangContext}
 import org.apache.wayang.core.plugin.Plugin
 
 /**
-  * Apache Wayang (incubating) implementation of TPC-H Query 3.
+  * Apache Wayang implementation of TPC-H Query 3.
   *
   * {{{
   * select

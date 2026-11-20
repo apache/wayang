@@ -32,7 +32,7 @@ import org.apache.wayang.core.plugin.Plugin
 import org.apache.wayang.core.util.fs.FileSystems
 
 /**
-  * This is a Apache Wayang (incubating)-based implementation of the SINDY algorithm.
+  * This is an Apache Wayang-based implementation of the SINDY algorithm.
   */
 class Sindy(plugins: Plugin*) {
 
@@ -41,7 +41,7 @@ class Sindy(plugins: Plugin*) {
     *
     * @param paths         input file or directory URLs
     * @param seperator     CSV separator in the files
-    * @param configuration Apache Wayang (incubating) configuration
+    * @param configuration Apache Wayang configuration
     * @param experiment    the experiment to log measurements to
     * @return the INDs
     */

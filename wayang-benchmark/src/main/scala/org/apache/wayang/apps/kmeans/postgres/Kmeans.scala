@@ -38,7 +38,7 @@ import scala.util.Random
 
 
 /**
-  * K-Means app for Apache Wayang (incubating) on PostgreSQL.
+  * K-Means app for Apache Wayang on PostgreSQL.
   * <p>Note the UDF load property `wayang.apps.kmeans.udfs.select-centroid.load`.</p>
   */
 class Kmeans(plugin: Plugin*) {

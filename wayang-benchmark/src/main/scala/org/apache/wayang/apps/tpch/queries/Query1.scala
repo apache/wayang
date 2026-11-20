@@ -29,7 +29,7 @@ import org.apache.wayang.jdbc.operators.JdbcTableSource
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate
 
 /**
-  * Apache Wayang (incubating) implementation of TPC-H Query 1.
+  * Apache Wayang implementation of TPC-H Query 1.
   *
   * {{{
   * select

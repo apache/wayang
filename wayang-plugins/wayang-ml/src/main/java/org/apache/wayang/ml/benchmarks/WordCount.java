@@ -50,7 +50,7 @@ import org.apache.wayang.ml.costs.DefaultPointwiseCost;
 import scala.collection.JavaConversions;
 
 /**
- * Example Apache Wayang (incubating) App that does a word count -- the Hello
+ * Example Apache Wayang App that does a word count -- the Hello
  * World of Map/Reduce-like systems.
  */
 public class WordCount {

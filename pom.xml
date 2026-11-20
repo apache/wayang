@@ -667,7 +667,6 @@
                     <resource>
                         <directory>${project.basedir}</directory>
                         <includes>
-                            <include>DISCLAIMER</include>
                             <include>LICENSE</include>
                             <include>NOTICE</include>
                             <include>RELEASE_NOTES</include>

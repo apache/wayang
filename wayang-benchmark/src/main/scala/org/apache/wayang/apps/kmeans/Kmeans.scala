@@ -35,7 +35,7 @@ import scala.collection.JavaConversions._
 import scala.util.Random
 
 /**
-  * K-Means app for Apache Wayang (incubating).
+  * K-Means app for Apache Wayang.
   * <p>Note the UDF load property `wayang.apps.kmeans.udfs.select-centroid.load`.</p>
   */
 class Kmeans(plugin: Plugin*) {

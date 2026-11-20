@@ -35,7 +35,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * This class executes a stochastic gradient descent optimization on Apache Wayang (incubating).
+ * This class executes a stochastic gradient descent optimization on Apache Wayang.
  */
 public class SGDImpl {
 
