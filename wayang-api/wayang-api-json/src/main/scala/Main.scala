@@ -29,37 +29,43 @@ import org.apache.wayang.api.json.parserutil.ParseOperatorsFromDrawflow
 import org.apache.wayang.api.json.parserutil.ParsePlanFromJson
 
 object Main extends ZIOAppDefault {
-  val drawRoute =
+  // Wayang cannot run several jobs at the same time, so jobs wait for this one permit and run one
+  // after another. They run with attemptBlocking so a long job does not hold up the threads that
+  // serve other requests; a waiting request is suspended, not blocking a thread.
+  def runJob[A](job: => A, jobLock: Semaphore): Task[A] =
+    jobLock.withPermit(ZIO.attemptBlocking(job))
+
+  def drawRoute(jobLock: Semaphore) =
     Method.POST / "wayang-api-json" / "submit-plan" / "drawflow-format" -> handler { (req: Request) =>
      (for {
         requestBody <- req.body.asString
         operatorsFromDrawflow <- ZIO.fromTry(Try(ParseOperatorsFromDrawflow.parseOperatorsFromString(requestBody).get))
         operatorsFromJson = operatorsFromDrawflow.flatMap(op => OperatorFromDrawflowConverter.toOperatorFromJson(op))
-        result <- ZIO.attempt(new JsonPlanBuilder().setOperators(operatorsFromJson).execute())
-        responseBody <- ZIO.attempt {
+        responseBody <- runJob({
+          val result = new JsonPlanBuilder().setOperators(operatorsFromJson).execute()
           if (operatorsFromJson.exists(op => op.cat == OperatorFromJson.Categories.Output))
             "Success"
           else
             result.collect().toString()
-        }
+        }, jobLock)
         resBody <- ZIO.succeed(Response.text(responseBody))
      } yield resBody).catchAll(t => ZIO.succeed(Response.text(t.getMessage)))
   }
 
-  val jsonRoute =
+  def jsonRoute(jobLock: Semaphore) =
     Method.POST / "wayang-api-json" / "submit-plan" / "json" -> handler { (req: Request) =>
      (for {
         requestBody <- req.body.asString
         planFromJson <- ZIO.fromTry(Try(ParsePlanFromJson.parsePlanFromString(requestBody).get))
-        result <- ZIO.attempt(new JsonPlanBuilder().fromPlan(planFromJson).execute())
-        responseBody <- ZIO.attempt {
+        responseBody <- runJob({
+          val result = new JsonPlanBuilder().fromPlan(planFromJson).execute()
           if (planFromJson.operators.exists(op => op.cat == OperatorFromJson.Categories.Output)) {
             println("Successfully executed WayangJob")
             "Success"
           } else {
             result.collect().toString()
           }
-        }
+        }, jobLock)
         resBody <- ZIO.succeed(Response.text(responseBody))
      } yield resBody).catchAll(t => {
       // Error messages printed in server
@@ -77,12 +83,11 @@ object Main extends ZIOAppDefault {
      })
     }
 
-  // Create HTTP route
-  val app = Routes(drawRoute, jsonRoute)
-
   // Run it like any simple app
   def run = for {
     args <- getArgs
+    jobLock <- Semaphore.make(1)
+    app = Routes(drawRoute(jobLock), jsonRoute(jobLock))
     _ <- Server.serve(app).provide(Server.defaultWithPort((args.headOption getOrElse "8080" toInt)))
   } yield ()
 }
