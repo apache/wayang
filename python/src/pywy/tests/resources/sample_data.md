@@ -150,7 +150,7 @@ Note the `***`: Wayang ships with multiple modules that can be included in your 
 * `wayang-core`: provides core data structures and the optimizer (required)
 * `wayang-basic`: provides common operators and data types for your apps (recommended)
 * `wayang-api-scala-java`: provides an easy-to-use Scala and Java API to assemble Wayang plans (recommended)
-* `wayang-java`, `wayang-spark`, `wayang-graphchi`, `wayang-sqlite3`, `wayang-postgres`: adapters for the various supported processing platforms
+* `wayang-java`, `wayang-spark`, `wayang-giraph`, `wayang-sqlite3`, `wayang-postgres`: adapters for the various supported processing platforms
 * `wayang-profiler`: provides functionality to learn operator and UDF cost functions from historical execution data
 
 > **NOTE:** The module `wayang-api-scala-java` is intended to be used with Java 11 and Scala 2.12.
