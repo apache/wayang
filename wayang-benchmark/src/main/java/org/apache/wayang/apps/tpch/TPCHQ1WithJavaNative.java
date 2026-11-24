@@ -30,7 +30,7 @@ import org.apache.wayang.java.platform.JavaPlatform;
 import org.apache.wayang.spark.Spark;
 
 /**
- * Main class for the TPC-H app based on Apache Wayang (incubating).
+ * Main class for the TPC-H app based on Apache Wayang.
  */
 public class TPCHQ1WithJavaNative {
 

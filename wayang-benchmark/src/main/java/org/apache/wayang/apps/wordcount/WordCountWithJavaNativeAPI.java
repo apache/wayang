@@ -42,7 +42,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Example Apache Wayang (incubating) App that does a word count -- the Hello World of Map/Reduce-like systems.
+ * Example Apache Wayang App that does a word count -- the Hello World of Map/Reduce-like systems.
  */
 public class WordCountWithJavaNativeAPI {
 

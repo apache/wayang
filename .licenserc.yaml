@@ -24,7 +24,6 @@ header:
     - NOTICE
     - LICENSE
     - RELEASE_NOTES
-    - DISCLAIMER
     - mvnw.cmd
     - .mvn
     - .gitattributes

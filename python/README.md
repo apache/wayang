@@ -70,7 +70,7 @@ be found (usually where pip installs them).
 - Starting the REST API as a background process
 ```shell
 cd wayang-assembly/target/
-tar -xvf apache-wayang-assembly-1.0.0-incubating-dist.tar.gz
+tar -xvf apache-wayang-assembly-1.0.0-dist.tar.gz
 cd wayang-1.0.0
 ./bin/wayang-submit org.apache.wayang.api.json.Main &
 ```
