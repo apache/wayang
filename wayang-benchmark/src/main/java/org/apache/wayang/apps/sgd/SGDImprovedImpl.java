@@ -36,7 +36,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * This class executes a stochastic gradient descent optimization on Apache Wayang (incubating), just like {@link SGDImpl}. However,
+ * This class executes a stochastic gradient descent optimization on Apache Wayang, just like {@link SGDImpl}. However,
  * it used the {@link org.apache.wayang.basic.operators.MapPartitionsOperator} for performance improvements.
  */
 public class SGDImprovedImpl {

@@ -21,7 +21,7 @@ under the License.
 
 This repository provides example applications and further benchmarking tools to evaluate and get started with [Apache Wayang](https://wayang.apache.org).
 
-Below we provide detailed information on our various benchmark components, including running instructions. For the configuration of Apache Wayang (incubating) itself, please consult the [Apache Wayang (incubating) repository](https://github.com/apache/incubator-wayang) or feel free to reach out on [dev@wayang.apache.org](mailto:dev@wayang.apache.org).
+Below we provide detailed information on our various benchmark components, including running instructions. For the configuration of Apache Wayang itself, please consult the [Apache Wayang repository](https://github.com/apache/wayang) or feel free to reach out on [dev@wayang.apache.org](mailto:dev@wayang.apache.org).
 
 
 ## Apache Wayang Example Applications
@@ -53,7 +53,7 @@ org.apache.wayang.apps.wordcount.WordCountScala
 ```
 Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters.
 
-**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang (incubating) in combination with this app:
+**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang in combination with this app:
 * [DBpedia - Long abstracts](http://wiki.dbpedia.org/Downloads2015-10) _NB: Consider stripping of the RDF container around the abstracts. It's not necessary, though._
 
 ### Word2NVec
@@ -66,7 +66,7 @@ org.apache.wayang.apps.simwords.Word2NVec
 ```
 Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters.
 
-**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang (incubating) in combination with this app:
+**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang in combination with this app:
 * [DBpedia - Long abstracts](http://wiki.dbpedia.org/Downloads2015-10) _NB: Consider stripping of the RDF container around the abstracts. It's not necessary, though._
 
 ### TPC-H Query 3
@@ -77,7 +77,7 @@ Even though this app is written in Scala, you can launch it in a regular JVM. Ru
 ```java
 org.apache.wayang.apps.tpch.TpcH
 ```
-Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters. Note that you will have to configure Apache Wayang (incubating), such that can access the database. Furthermore, this app depends on the following configuration keys:
+Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters. Note that you will have to configure Apache Wayang, such that can access the database. Furthermore, this app depends on the following configuration keys:
 * `wayang.apps.tpch.csv.customer`: URL to the `CUSTOMER` file
 * `wayang.apps.tpch.csv.orders`: URL to the `ORDERS` file
 * `wayang.apps.tpch.csv.lineitem`: URL to the `LINEITEM` file
@@ -94,7 +94,7 @@ org.apache.wayang.apps.sindy.Sindy
 ```
 Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters.
 
-**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang (incubating) in combination with this app:
+**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang in combination with this app:
 * CSV files generated with the [TPC-H tools](https://www.tpc.org/tpch/)
 * [other CSV files](https://hpi.de/naumann/projects/repeatability/data-profiling/metanome-ind-algorithms.html)
 
@@ -108,7 +108,7 @@ org.apache.wayang.apps.sgd.SGD
 ```
 Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters.
 
-**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang (incubating) in combination with this app:
+**Datasets.** Find below a list of datasets that can be used to benchmark Apache Wayang in combination with this app:
 * [HIGGS](https://archive.ics.uci.edu/ml/datasets/HIGGS)
 * [Other datasets](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html)
 
@@ -124,10 +124,10 @@ or
 ```java
 org.apache.wayang.apps.kmeans.postgres.Kmeans
 ```
-The latter assumes data to reside in a filesystem, while the other assumes data to reside in PostgreSQL. For the latter case, you will have to configure Apache Wayang (incubating), such that it can access the database.
+The latter assumes data to reside in a filesystem, while the other assumes data to reside in PostgreSQL. For the latter case, you will have to configure Apache Wayang, such that it can access the database.
 Even though this app is written in Scala, you can launch it in a regular JVM. Run the app without parameters to get a description of the required parameters.
 
-**Datasets.** We provide a [data generator](https://github.com/apache/incubator-wayang/blob/main/wayang-benchmark/code/test/resources/kmeans-datagenerator.py) to generate files that can be clustered. You can further load these files into the database assuming the following schema:
+**Datasets.** We provide a [data generator](https://github.com/apache/wayang/blob/main/wayang-benchmark/src/test/resources/kmeans-datagenerator.py) to generate files that can be clustered. You can further load these files into the database assuming the following schema:
 ```sql
 CREATE TABLE "<table_name_of_your_choice>" (x float8, y float8);
 ```
@@ -148,7 +148,7 @@ Even though this app is written in Scala, you can launch it in a regular JVM. Ru
 
 ### Optimizer scalability
 
-**Description.** This app generates Apache Wayang (incubating) plans with specific predefined topologies but of arbitrary size. This allows to experimentally determine the scalability of Apache Wayang (incubating)'s optimizer to large plans.
+**Description.** This app generates Apache Wayang plans with specific predefined topologies but of arbitrary size. This allows to experimentally determine the scalability of Apache Wayang's optimizer to large plans.
 
 **Running the app.** To run the app, launch the main class:
 ```java
