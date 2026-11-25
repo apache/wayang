@@ -183,7 +183,7 @@ The available modules:
 - `wayang-core` — core data structures and the optimizer (**required**)
 - `wayang-basic` — common operators and data types (recommended)
 - `wayang-api-scala-java` — fluent Scala/Java API for building plans (recommended)
-- `wayang-java`, `wayang-spark`, `wayang-flink`, `wayang-postgres`, `wayang-sqlite3`, `wayang-graphchi`, `wayang-tensorflow`, `wayang-kafka` — per-platform adapters; include one per engine you want available
+- `wayang-java`, `wayang-spark`, `wayang-flink`, `wayang-postgres`, `wayang-sqlite3`, `wayang-giraph`, `wayang-tensorflow` — per-platform adapters; include one per engine you want available
 - `wayang-profiler` — learns operator and UDF cost functions from historical executions
 
 For snapshot builds, add Apache's snapshot repository:
