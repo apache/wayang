@@ -421,6 +421,46 @@ class SqlToWayangRelTest {
     }
 
     @Test
+    void javaAggregatesSkipNulls() throws Exception {
+        // col1 is 1, null, 3, null, 5, null: aggregates over col1 only see 1, 3 and 5
+        assertEquals(List.of(new Record(6)), this.executeOnNullGroups("SELECT COUNT(*) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(3)), this.executeOnNullGroups("SELECT COUNT(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(9)), this.executeOnNullGroups("SELECT SUM(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(3.0)), this.executeOnNullGroups("SELECT AVG(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(1)), this.executeOnNullGroups("SELECT MIN(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(5)), this.executeOnNullGroups("SELECT MAX(col1) FROM fs.exampleNullGroups"));
+    }
+
+    private List<Record> executeOnNullGroups(final String sql) throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext, sql);
+        sqlContext.execute(t.field1);
+
+        return new ArrayList<>(t.field0);
+    }
+
+    @Test
+    void javaGroupedAggregatesSkipNulls() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col2, COUNT(col1), SUM(col1), AVG(col1) FROM fs.exampleNullGroups GROUP BY col2");
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        sqlContext.execute(wayangPlan);
+
+        // group c only has a null, so its SUM and AVG are null as well
+        final List<Record> expected = List.of(
+                new Record("a", 1, 1, 1.0),
+                new Record("b", 2, 8, 4.0),
+                new Record("c", 0, null, null));
+        assertEquals(expected.size(), result.size());
+        assertTrue(result.containsAll(expected), "expected " + expected + ", got: " + result);
+    }
+
+    @Test
     void filterNotEqualsValue() throws Exception {
         final SqlContext sqlContext = this.createSqlContext("/data/largeLeftTableIndex.csv");
 
@@ -663,6 +703,27 @@ class SqlToWayangRelTest {
         sqlContext.execute(wayangPlan);
 
         assertTrue(result.stream().anyMatch(rec -> rec.equals(new Record("test1", "test1", "test2"))));
+    }
+
+    @Test
+    void sparkGroupedAggregatesSkipNulls() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col2, COUNT(col1), SUM(col1), AVG(col1) FROM fs.exampleNullGroups GROUP BY col2");
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        PlanTraversal.upstream().traverse(wayangPlan.getSinks()).getTraversedNodes()
+                .forEach(node -> node.addTargetPlatform(Spark.platform()));
+
+        sqlContext.execute(wayangPlan);
+
+        final List<Record> expected = List.of(
+                new Record("a", 1, 1, 1.0),
+                new Record("b", 2, 8, 4.0),
+                new Record("c", 0, null, null));
+        assertEquals(expected.size(), result.size());
+        assertTrue(result.containsAll(expected), "expected " + expected + ", got: " + result);
     }
 
     @Test

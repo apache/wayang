@@ -29,6 +29,7 @@ import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.function.FunctionDescriptor;
+import org.apache.wayang.core.util.ReflectionUtils;
 
 public class AggregateGetResult implements FunctionDescriptor.SerializableFunction<Record, Record> {
         private final List<SqlKind> aggregateKindList;
@@ -52,8 +53,7 @@ public class AggregateGetResult implements FunctionDescriptor.SerializableFuncti
 
                 final Object[] aggregateCallFields = IntStream.range(0, aggregateKindList.size())
                                 .mapToObj(i -> aggregateKindList.get(i).equals(SqlKind.AVG)
-                                                ? record.getDouble(i + aggregateCallOffset)
-                                                                / record.getDouble(recordSize - 1)
+                                                ? average(record.getField(i + aggregateCallOffset))
                                                 : record.getField(i + aggregateCallOffset))
                                 .toArray();
 
@@ -61,5 +61,17 @@ public class AggregateGetResult implements FunctionDescriptor.SerializableFuncti
                                 .toArray();
 
                 return new Record(combinedFields);
+        }
+
+        /**
+         * Divides the running sum of an AVG by its number of non-null values, see {@link AggregateAddCols}.
+         *
+         * @param sumAndCount the running sum and the number of non-null values
+         * @return the average, or null if all values were null
+         */
+        private static Object average(final Object sumAndCount) {
+                final Object[] partial = (Object[]) sumAndCount;
+                final int count = (Integer) partial[1];
+                return count == 0 ? null : ReflectionUtils.toDouble(partial[0]) / count;
         }
 }
