@@ -30,10 +30,16 @@ import org.apache.wayang.spatial.Spatial;
 import org.apache.wayang.spatial.data.WayangGeometry;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -571,4 +577,139 @@ public class JavaApiSpatialTest {
         Long count = result.iterator().next();
         System.out.println("PostgreSQL Spatial Filter (ST_Within): " + count + " boxes within the query geometry");
     }
+
+    @Test
+    @Disabled("Requires local Postgres test database.")
+    void testSpatialJoinWithPostgres() {
+        WayangContext wayangContext = new WayangContext(getPostgresConfiguration())
+                .withPlugin(Java.basicPlugin())
+                .withPlugin(Postgres.plugin())
+                .withPlugin(Spatial.postgresPlugin());
+
+        JavaPlanBuilder planBuilder = new JavaPlanBuilder(wayangContext)
+                .withJobName("Spatial Join with Postgres Test");
+
+        // Joins two distinct tables: spider_boxes_copy is a copy of spider_boxes.
+        Collection<Long> result = planBuilder
+                .readTable(new PostgresTableSource("spider_boxes", "x_min", "y_min", "x_max", "y_max", "geom"))
+                .spatialJoin(
+                        (Record record) -> WayangGeometry.fromStringInput(record.getString(4)),
+                        planBuilder.readTable(
+                                new PostgresTableSource("spider_boxes_copy", "x_min", "y_min", "x_max", "y_max", "geom")),
+                        (Record record) -> WayangGeometry.fromStringInput(record.getString(4)),
+                        SpatialPredicate.INTERSECTS
+                )
+                .withSqlGeometryColumns("spider_boxes", "geom", "spider_boxes_copy", "geom")
+                .withTargetPlatform(Postgres.platform())
+                .count()
+                .collect();
+
+        assertEquals(1, result.size());
+        assertTrue(result.iterator().next() > 0, "Expected every box to intersect at least its own copy.");
+    }
+
+    @Test
+    void testSpatialJoinRejectsPartialSqlGeometryColumns() {
+        WayangContext wayangContext = new WayangContext(new Configuration())
+                .withPlugin(Java.basicPlugin())
+                .withPlugin(Spatial.javaPlugin());
+        JavaPlanBuilder planBuilder = new JavaPlanBuilder(wayangContext);
+
+        assertThrows(IllegalArgumentException.class, () -> planBuilder
+                .loadCollection(Arrays.asList("POINT(0.5 0.5)"))
+                .spatialJoin(
+                        WayangGeometry::fromStringInput,
+                        planBuilder.loadCollection(Arrays.asList("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))")),
+                        WayangGeometry::fromStringInput,
+                        SpatialPredicate.INTERSECTS
+                )
+                .withSqlGeometryColumns("points", "geom", null, null)
+                .count()
+                .collect());
+    }
+
+    // ==================== GeoJSON Source / Sink ====================
+
+    @Test
+    void testGeoJsonRoundTrip(@TempDir Path tempDir) throws Exception {
+        WayangContext wayangContext = new WayangContext(new Configuration())
+                .withPlugin(Java.basicPlugin())
+                .withPlugin(Spatial.javaPlugin());
+
+        Path outputFile = tempDir.resolve("features.geojson");
+        String outputUrl = "file:" + outputFile;
+
+        Map<String, Object> pointProperties = new HashMap<>();
+        pointProperties.put("name", "alpha");
+        Map<String, Object> polygonProperties = new HashMap<>();
+        polygonProperties.put("name", "beta");
+
+        List<Record> features = Arrays.asList(
+                new Record(WayangGeometry.fromStringInput("POINT(1 2)"), pointProperties),
+                new Record(
+                        WayangGeometry.fromStringInput("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"),
+                        polygonProperties)
+        );
+
+        new JavaPlanBuilder(wayangContext)
+                .withJobName("GeoJSON Sink Test")
+                .loadCollection(features)
+                .writeGeoJsonFile(outputUrl);
+
+        assertTrue(Files.exists(outputFile), "Expected the GeoJSON output file to be created.");
+        assertTrue(Files.readString(outputFile).startsWith("{\"type\":\"FeatureCollection\""),
+                "Expected a GeoJSON FeatureCollection.");
+
+        Collection<Record> readBack = new JavaPlanBuilder(wayangContext)
+                .withJobName("GeoJSON Source Test")
+                .readGeoJsonFile(outputUrl)
+                .collect();
+
+        assertEquals(2, readBack.size(), "Expected both features to be read back.");
+
+        // The sink and the source agree on the record shape: geometry in field 0, properties in field 1.
+        List<String> geometryTypes = readBack.stream()
+                .map(record -> ((WayangGeometry) record.getField(0)).getGeometry().getGeometryType())
+                .sorted()
+                .collect(Collectors.toList());
+        assertEquals(Arrays.asList("Point", "Polygon"), geometryTypes,
+                "Expected the geometries to survive the round trip.");
+
+        List<String> names = readBack.stream()
+                .map(record -> ((Map<?, ?>) record.getField(1)).get("name").toString())
+                .sorted()
+                .collect(Collectors.toList());
+        assertEquals(Arrays.asList("alpha", "beta"), names,
+                "Expected the feature properties to survive the round trip.");
+    }
+
+    @Test
+    void testGeoJsonNullPropertiesAndNoCrs(@TempDir Path tempDir) throws Exception {
+        WayangContext wayangContext = new WayangContext(new Configuration())
+                .withPlugin(Java.basicPlugin())
+                .withPlugin(Spatial.javaPlugin());
+
+        Path outputFile = tempDir.resolve("null-properties.geojson");
+        String outputUrl = "file:" + outputFile;
+
+        new JavaPlanBuilder(wayangContext)
+                .withJobName("GeoJSON Sink Null Properties Test")
+                .loadCollection(Arrays.asList(new Record(WayangGeometry.fromStringInput("POINT(1 2)"), null)))
+                .writeGeoJsonFile(outputUrl);
+
+        String written = Files.readString(outputFile);
+        assertFalse(written.contains("\"crs\""), "Expected no crs member, as RFC 7946 requires: " + written);
+        assertTrue(written.contains("\"properties\":null"), "Expected null properties to be kept: " + written);
+
+        Collection<Record> readBack = new JavaPlanBuilder(wayangContext)
+                .withJobName("GeoJSON Source Null Properties Test")
+                .readGeoJsonFile(outputUrl)
+                .collect();
+
+        assertEquals(1, readBack.size());
+        Record feature = readBack.iterator().next();
+        assertEquals("Point", ((WayangGeometry) feature.getField(0)).getGeometry().getGeometryType());
+        assertNull(feature.getField(1), "Expected the null properties to survive the round trip.");
+    }
+
 }

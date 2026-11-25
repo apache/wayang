@@ -40,14 +40,17 @@ import org.apache.wayang.api.json.operatorfromjson.unary._
     new JsonSubTypes.Type(value = classOf[InputCollectionFromJson], name = OperatorNames.InputCollection),
     new JsonSubTypes.Type(value = classOf[InputCollectionFromJson], name = OperatorNames.Table),
     new JsonSubTypes.Type(value = classOf[JDBCRemoteInputFromJson], name = OperatorNames.JDBCRemoteInput),
+    new JsonSubTypes.Type(value = classOf[GeoJsonFileInputFromJson], name = OperatorNames.GeoJsonFileInput),
 
     // Output operators
     new JsonSubTypes.Type(value = classOf[TextFileOutputFromJson], name = OperatorNames.TextFileOutput),
+    new JsonSubTypes.Type(value = classOf[GeoJsonFileOutputFromJson], name = OperatorNames.GeoJsonFileOutput),
 
     // Unary operators
     new JsonSubTypes.Type(value = classOf[MapOperatorFromJson], name = OperatorNames.Map),
     new JsonSubTypes.Type(value = classOf[FlatMapOperatorFromJson], name = OperatorNames.FlatMap),
     new JsonSubTypes.Type(value = classOf[FilterOperatorFromJson], name = OperatorNames.Filter),
+    new JsonSubTypes.Type(value = classOf[SpatialFilterOperatorFromJson], name = OperatorNames.SpatialFilter),
     new JsonSubTypes.Type(value = classOf[ReduceByOperatorFromJson], name = OperatorNames.ReduceBy),
     new JsonSubTypes.Type(value = classOf[CountOperatorFromJson], name = OperatorNames.Count),
     new JsonSubTypes.Type(value = classOf[GroupByOperatorFromJson], name = OperatorNames.GroupBy),
@@ -65,6 +68,7 @@ import org.apache.wayang.api.json.operatorfromjson.unary._
     // Binary operators
     new JsonSubTypes.Type(value = classOf[UnionOperatorFromJson], name = OperatorNames.Union),
     new JsonSubTypes.Type(value = classOf[JoinOperatorFromJson], name = OperatorNames.Join),
+    new JsonSubTypes.Type(value = classOf[SpatialJoinOperatorFromJson], name = OperatorNames.SpatialJoin),
     new JsonSubTypes.Type(value = classOf[PredictOperatorFromJson], name = OperatorNames.Predict),
     new JsonSubTypes.Type(value = classOf[DLTrainingOperatorFromJson], name = OperatorNames.DLTraining),
     new JsonSubTypes.Type(value = classOf[CartesianOperatorFromJson], name = OperatorNames.Cartesian),
@@ -141,14 +145,17 @@ object OperatorFromJson {
     final val InputCollection = "inputCollection"
     final val Table = "table"
     final val JDBCRemoteInput = "jdbcRemoteInput"
+    final val GeoJsonFileInput = "geoJsonFileInput"
 
     // Output
     final val TextFileOutput = "textFileOutput"
+    final val GeoJsonFileOutput = "geoJsonFileOutput"
 
     // Unary
     final val Map = "map"
     final val FlatMap = "flatMap"
     final val Filter = "filter"
+    final val SpatialFilter = "spatialFilter"
     final val ReduceBy = "reduceBy"
     final val Count = "count"
     final val GroupBy = "groupBy"
@@ -166,6 +173,7 @@ object OperatorFromJson {
     // Binary
     final val Union = "union"
     final val Join = "join"
+    final val SpatialJoin = "spatialJoin"
     final val Predict = "predict"
     final val DLTraining = "dlTraining"
     final val Cartesian = "cartesian"

@@ -34,6 +34,7 @@ import org.apache.wayang.api.json.operatorfromjson.unary.{CountOperatorFromJson,
 class ContextFromJson(val platforms: List[String],
                       val origin: String,
                       val configuration: Map[String, String],
+                      val plugins: List[String] = List(),
                       ) extends Serializable {
 
   //
@@ -66,5 +67,9 @@ object ContextFromJson {
     final val Postgres = "postgres"
     final val SQLite3 = "sqlite3"
     final val All = List(Java, Spark, Flink, JDBC, Postgres, SQLite3)
+  }
+
+  object Plugins {
+    final val Spatial = "spatial"
   }
 }

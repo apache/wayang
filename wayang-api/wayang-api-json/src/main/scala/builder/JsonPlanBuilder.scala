@@ -18,14 +18,15 @@
 package org.apache.wayang.api.json.builder
 
 import org.apache.wayang.api.json.operatorfromjson.OperatorFromJson.ExecutionPlatforms
+import org.apache.wayang.api.json.exception.WayangApiJsonException
 import org.apache.wayang.api.json.parserutil.{SerializableIterable, SerializableLambda, SerializableLambda2}
-import org.apache.wayang.api.json.operatorfromjson.{ComposedOperatorFromJson, OperatorFromJson}
-import org.apache.wayang.api.json.operatorfromjson.binary.{CartesianOperatorFromJson, CoGroupOperatorFromJson, IntersectOperatorFromJson, JoinOperatorFromJson, PredictOperatorFromJson, DLTrainingOperatorFromJson, UnionOperatorFromJson}
+import org.apache.wayang.api.json.operatorfromjson.{ComposedOperatorFromJson, ContextFromJson, OperatorFromJson}
+import org.apache.wayang.api.json.operatorfromjson.binary.{CartesianOperatorFromJson, CoGroupOperatorFromJson, IntersectOperatorFromJson, JoinOperatorFromJson, PredictOperatorFromJson, DLTrainingOperatorFromJson, SpatialJoinOperatorFromJson, UnionOperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.other.KMeansFromJson
-import org.apache.wayang.api.json.operatorfromjson.input.{InputCollectionFromJson, JDBCRemoteInputFromJson, TableInputFromJson, TextFileInputFromJson, ParquetInputFromJson}
+import org.apache.wayang.api.json.operatorfromjson.input.{GeoJsonFileInputFromJson, InputCollectionFromJson, JDBCRemoteInputFromJson, TableInputFromJson, TextFileInputFromJson, ParquetInputFromJson}
 import org.apache.wayang.api.json.operatorfromjson.loop.{DoWhileOperatorFromJson, ForeachOperatorFromJson, RepeatOperatorFromJson}
-import org.apache.wayang.api.json.operatorfromjson.output.TextFileOutputFromJson
-import org.apache.wayang.api.json.operatorfromjson.unary.{CountOperatorFromJson, DistinctOperatorFromJson, FilterOperatorFromJson, FlatMapOperatorFromJson, GroupByOperatorFromJson, MapOperatorFromJson, MapPartitionsOperatorFromJson, ReduceByOperatorFromJson, ReduceOperatorFromJson, SampleOperatorFromJson, SortOperatorFromJson}
+import org.apache.wayang.api.json.operatorfromjson.output.{GeoJsonFileOutputFromJson, TextFileOutputFromJson}
+import org.apache.wayang.api.json.operatorfromjson.unary.{CountOperatorFromJson, DistinctOperatorFromJson, FilterOperatorFromJson, FlatMapOperatorFromJson, GroupByOperatorFromJson, MapOperatorFromJson, MapPartitionsOperatorFromJson, ReduceByOperatorFromJson, ReduceOperatorFromJson, SampleOperatorFromJson, SortOperatorFromJson, SpatialFilterOperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.PlanFromJson
 import org.apache.wayang.api._
 import org.apache.wayang.basic.operators._
@@ -34,6 +35,8 @@ import org.apache.wayang.core.api.{Configuration, WayangContext}
 import org.apache.wayang.core.function.ExecutionContext
 import org.apache.wayang.core.function.FunctionDescriptor.ExtendedSerializableFunction
 import org.apache.wayang.core.platform.Platform
+import org.apache.wayang.core.util.ReflectionUtils
+import org.apache.wayang.core.api.spatial.{SpatialGeometry, SpatialPredicate}
 import org.apache.wayang.java.Java
 import org.apache.wayang.postgres.Postgres
 import org.apache.wayang.postgres.operators.PostgresTableSource
@@ -59,9 +62,20 @@ class JsonPlanBuilder() {
     Spark.basicPlugin
   )
   var origin: String = null
+  var platformNames: List[String] = List(
+    OperatorFromJson.ExecutionPlatforms.Java,
+    OperatorFromJson.ExecutionPlatforms.Spark
+  )
 
   def setPlatforms(platforms: List[String]): JsonPlanBuilder = {
+    platformNames = platforms
     plugins = platforms.map(pl => getPlatformPlugin(pl))
+    this
+  }
+
+  def setPlugins(names: List[String]): JsonPlanBuilder = {
+    val pluginNames = Option(names).getOrElse(List())
+    plugins = plugins ++ pluginNames.flatMap(getPlugins(_, platformNames))
     this
   }
 
@@ -72,6 +86,7 @@ class JsonPlanBuilder() {
 
   def fromPlan(plan: PlanFromJson): JsonPlanBuilder = {
     setPlatforms(plan.context.platforms)
+    setPlugins(plan.context.plugins)
     setOrigin(plan.context.origin)
     setConfiguration(plan.context.configuration)
     setOperators(plan.operators)
@@ -158,9 +173,11 @@ class JsonPlanBuilder() {
       case inputOperator: InputCollectionFromJson => visit(inputOperator, planBuilder)
       case inputOperator: TableInputFromJson => visit(inputOperator, planBuilder)
       case inputOperator: JDBCRemoteInputFromJson => visit(inputOperator, planBuilder)
+      case inputOperator: GeoJsonFileInputFromJson => visit(inputOperator, planBuilder)
 
       // output
       case outputOperator: TextFileOutputFromJson => visit(outputOperator, executeRecursive(this.operators(operator.input(0)), planBuilder))
+      case outputOperator: GeoJsonFileOutputFromJson => visit(outputOperator, executeRecursive(this.operators(operator.input(0)), planBuilder))
 
       // unary
       case operator: MapOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
@@ -174,10 +191,12 @@ class JsonPlanBuilder() {
       case operator: ReduceOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
       case operator: SampleOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
       case operator: MapPartitionsOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
+      case operator: SpatialFilterOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
 
       // binary
       case operator: UnionOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
       case operator: JoinOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
+      case operator: SpatialJoinOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
       case operator: CartesianOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
       case operator: CoGroupOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
       case operator: IntersectOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
@@ -234,12 +253,30 @@ class JsonPlanBuilder() {
       planBuilder.readTable(new PostgresTableSource(operator.data.table, operator.data.columnNames: _*)).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform)).asInstanceOf[DataQuanta[Any]]
   }
 
+  private def visit(operator: GeoJsonFileInputFromJson, planBuilder: PlanBuilder): DataQuanta[Any] = {
+    if (!ExecutionPlatforms.All.contains(operator.executionPlatform))
+      planBuilder.load(new GeoJsonFileSource(operator.data.filename)).asInstanceOf[DataQuanta[Any]]
+    else
+      planBuilder.load(new GeoJsonFileSource(operator.data.filename)).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform)).asInstanceOf[DataQuanta[Any]]
+  }
+
   //
   // Output operators
   //
 
   private def visit(operator: TextFileOutputFromJson, dataQuanta: DataQuanta[Any]): DataQuanta[Any] = {
     dataQuanta.writeTextFile(operator.data.filename, (x: Any) => x.toString)
+    dataQuanta
+  }
+
+  private def visit(operator: GeoJsonFileOutputFromJson, dataQuanta: DataQuanta[Any]): DataQuanta[Any] = {
+    // The sink accepts only Record-typed input, so re-type Object output from UDF operators.
+    val records =
+      if (classOf[Record].isAssignableFrom(dataQuanta.output.getType.getDataUnitType.getTypeClass))
+        dataQuanta.asInstanceOf[DataQuanta[Record]]
+      else
+        dataQuanta.map(_.asInstanceOf[Record])
+    records.writeGeoJsonFile(operator.data.filename)
     dataQuanta
   }
 
@@ -378,6 +415,16 @@ class JsonPlanBuilder() {
     }
   }
 
+  private def visit(operator: SpatialFilterOperatorFromJson, dataQuanta: DataQuanta[Any]): DataQuanta[Any] = {
+    val key = SerializableLambda.createLambda[Any, SpatialGeometry](operator.data.keyUdf)
+    val predicate = SpatialPredicate.valueOf(operator.data.predicate)
+    val geometry = getSpatialGeometry(operator.data.geometry)
+    if (!ExecutionPlatforms.All.contains(operator.executionPlatform))
+      dataQuanta.spatialFilter(key, predicate, geometry, operator.data.columnName)
+    else
+      dataQuanta.spatialFilter(key, predicate, geometry, operator.data.columnName).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform))
+  }
+
   private def visit(operator: SampleOperatorFromJson, dataQuanta: DataQuanta[Any]): DataQuanta[Any] = {
     if (!ExecutionPlatforms.All.contains(operator.executionPlatform))
       dataQuanta.sample(operator.data.sampleSize)
@@ -437,6 +484,20 @@ class JsonPlanBuilder() {
         dataQuanta1.join(lambda1, dataQuanta2, lambda2).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform))
           .map(tuple2 => (tuple2.field0, tuple2.field1)).withTargetPlatforms(getExecutionPlatform(operator.executionPlatform)).asInstanceOf[DataQuanta[Any]]
     }
+  }
+
+  private def visit(operator: SpatialJoinOperatorFromJson, dataQuanta1: DataQuanta[Any], dataQuanta2: DataQuanta[Any]): DataQuanta[Any] = {
+    val leftKey = SerializableLambda.createLambda[Any, SpatialGeometry](operator.data.leftKeyUdf)
+    val rightKey = SerializableLambda.createLambda[Any, SpatialGeometry](operator.data.rightKeyUdf)
+    val predicate = SpatialPredicate.valueOf(operator.data.predicate)
+    val joined = dataQuanta1.spatialJoin(
+      leftKey, dataQuanta2, rightKey, predicate,
+      operator.data.leftTable, operator.data.leftColumn,
+      operator.data.rightTable, operator.data.rightColumn)
+    if (!ExecutionPlatforms.All.contains(operator.executionPlatform))
+      joined.asInstanceOf[DataQuanta[Any]]
+    else
+      joined.withTargetPlatforms(getExecutionPlatform(operator.executionPlatform)).asInstanceOf[DataQuanta[Any]]
   }
 
   private def visit(operator: PredictOperatorFromJson, dataQuanta1: DataQuanta[Any], dataQuanta2: DataQuanta[Any]): DataQuanta[Any] = {
@@ -609,6 +670,7 @@ class JsonPlanBuilder() {
     executionPlatform match {
       case OperatorFromJson.ExecutionPlatforms.Java => Java.platform()
       case OperatorFromJson.ExecutionPlatforms.Spark => Spark.platform()
+      case OperatorFromJson.ExecutionPlatforms.Postgres => Postgres.platform()
       case _ => null
     }
   }
@@ -625,4 +687,49 @@ class JsonPlanBuilder() {
       case _ => null
     }
   }
+
+  /*
+  * Optional plugins
+  */
+  private val SpatialPackage = "org.apache.wayang.spatial"
+
+  private val SpatialPlatformPlugins = List(
+    OperatorFromJson.ExecutionPlatforms.Java -> "javaPlugin",
+    OperatorFromJson.ExecutionPlatforms.Spark -> "sparkPlugin",
+    OperatorFromJson.ExecutionPlatforms.Postgres -> "postgresPlugin")
+
+  private def getPlugins(pluginName: String, platforms: List[String]): List[Plugin] = pluginName match {
+    case ContextFromJson.Plugins.Spatial =>
+      val supported = SpatialPlatformPlugins.filter { case (platform, _) => platforms.contains(platform) }
+      if (supported.isEmpty)
+        throw new WayangApiJsonException(
+          s"The '${ContextFromJson.Plugins.Spatial}' plugin needs java, spark or postgres among the plan's platforms.")
+      supported.map { case (_, factory) =>
+        requireSpatial(ReflectionUtils.evaluate[Plugin](s"$SpatialPackage.Spatial.$factory()"))
+      }
+    case other =>
+      throw new WayangApiJsonException(s"Unknown plugin '$other'.")
+  }
+
+  private def getSpatialGeometry(literal: String): SpatialGeometry =
+    requireSpatial(
+      Class.forName(s"$SpatialPackage.data.WayangGeometry")
+        .getMethod("fromStringInput", classOf[String])
+        .invoke(null, literal)
+        .asInstanceOf[SpatialGeometry])
+
+  private def requireSpatial[T](resolve: => T): T =
+    try resolve
+    catch {
+      case e: Throwable if missingClass(e).isDefined =>
+        throw new WayangApiJsonException(
+          s"The '${ContextFromJson.Plugins.Spatial}' plugin is not on the classpath " +
+            s"(missing ${missingClass(e).get}). Add wayang-spatial to the classpath to run spatial plans.")
+    }
+
+  private def missingClass(e: Throwable): Option[String] =
+    Iterator.iterate(e)(_.getCause).takeWhile(_ != null).collectFirst {
+      case c: ClassNotFoundException => c.getMessage
+      case c: NoClassDefFoundError => c.getMessage
+    }
 }
