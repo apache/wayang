@@ -149,17 +149,33 @@ class JsonPlanBuilder() {
       outputOperators = operators.values.filter(operator => operator.output.length == 0).toList
     val outputOperator = outputOperators.head
 
-    // The executor cannot yet feed the same channel into multiple inputs of one operator.
-    // Keep constructing separate inputs in that case, while sharing ancestors across branches.
-    val repeatedInputIds = operators.values.flatMap { operator =>
-      operator.input.groupBy(identity).collect { case (id, inputs) if inputs.length > 1 => id }
-    }.toSet
+    // A plan with only unary operators cannot reach the same ancestor along two branches.
+    // foreach triggers execution and returns its input; preserve separate construction so
+    // caching neither aliases different IDs nor suppresses actions on repeated branches.
+    val sharedInputIds = if (!operators.values.exists(_.input.length > 1) ||
+      operators.values.exists(_.isInstanceOf[ForeachOperatorFromJson])) Set.empty[Long] else {
+      val seenInputIds = mutable.Set.empty[Long]
+      val sharedIds = mutable.Set.empty[Long]
+      val repeatedInputIds = mutable.Set.empty[Long]
+      operators.values.foreach { operator =>
+        operator.input.foreach { id =>
+          if (!seenInputIds.add(id)) sharedIds += id
+        }
+        // The executor cannot yet feed the same channel into multiple inputs of one operator.
+        if (operator.input.length > 1) {
+          operator.input.groupBy(identity).foreach { case (id, inputs) =>
+            if (inputs.length > 1) repeatedInputIds += id
+          }
+        }
+      }
+      (sharedIds -- repeatedInputIds).toSet
+    }
     // Scope the constructed operators to this execution so later calls build a fresh plan.
-    val dataQuantaById = mutable.Map.empty[Long, DataQuanta[Any]]
+    lazy val dataQuantaById = mutable.Map.empty[Long, DataQuanta[Any]]
 
     def executeRecursive(operator: OperatorFromJson): DataQuanta[Any] = {
-      if (repeatedInputIds.contains(operator.id)) buildOperator(operator)
-      else dataQuantaById.getOrElseUpdate(operator.id, buildOperator(operator))
+      if (sharedInputIds.contains(operator.id)) dataQuantaById.getOrElseUpdate(operator.id, buildOperator(operator))
+      else buildOperator(operator)
     }
 
     def buildOperator(operator: OperatorFromJson): DataQuanta[Any] = {

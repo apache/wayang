@@ -25,7 +25,7 @@ import org.apache.wayang.api.json.builder.JsonPlanBuilder
 import org.apache.wayang.api.json.operatorfromjson.OperatorFromJson
 import org.apache.wayang.api.json.operatorfromjson.binary.{JoinOperatorFromJson, UnionOperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.input.TextFileInputFromJson
-import org.apache.wayang.api.json.operatorfromjson.loop.RepeatOperatorFromJson
+import org.apache.wayang.api.json.operatorfromjson.loop.{ForeachOperatorFromJson, RepeatOperatorFromJson}
 import org.apache.wayang.api.json.operatorfromjson.unary.{DistinctOperatorFromJson, SampleOperatorFromJson}
 import org.apache.wayang.core.api.Configuration
 import org.apache.wayang.core.plan.wayangplan.{Operator, PlanTraversal}
@@ -91,6 +91,19 @@ class JsonPlanBuilderTest {
   }
 
   @Test
+  def testLinearPlan(): Unit = {
+    val builder = createBuilder(
+      source(1, Array(2)),
+      DistinctOperatorFromJson(2, Array(1), Array(3), "unary", "distinct"),
+      DistinctOperatorFromJson(3, Array(2), Array.empty, "unary", "distinct")
+    )
+    val result = builder.execute()
+
+    assertEquals(3, operators(result.operator).size)
+    assertEquals(List("alpha", "beta"), result.collect().toList.map(_.toString).sorted)
+  }
+
+  @Test
   def testRepeatedExecutionBuildsFreshOperators(): Unit = {
     val builder = createBuilder(
       source(1, Array(2, 3)),
@@ -106,6 +119,20 @@ class JsonPlanBuilderTest {
     assertTrue(firstOperators.intersect(secondOperators).isEmpty)
     assertEquals(4, firstOperators.size)
     assertEquals(4, secondOperators.size)
+  }
+
+  @Test
+  def testSharingUsesInputReferences(): Unit = {
+    val builder = createBuilder(
+      source(1, Array(2)),
+      DistinctOperatorFromJson(2, Array(1), Array(4), "unary", "distinct"),
+      DistinctOperatorFromJson(3, Array(1), Array(4), "unary", "distinct"),
+      UnionOperatorFromJson(4, Array(2, 3), Array.empty, "binary", "union")
+    )
+    val result = builder.execute()
+
+    assertSame(input(input(result.operator, 0), 0), input(input(result.operator, 1), 0))
+    assertEquals(4, operators(result.operator).size)
   }
 
   @Test
@@ -131,6 +158,50 @@ class JsonPlanBuilderTest {
     val result = builder.execute()
 
     assertEquals(List("alpha!!", "alpha!!", "alpha!!", "alpha!!", "beta!!", "beta!!"),
+      result.collect().toList.map(_.toString).sorted)
+  }
+
+  @Test
+  def testForeachBranchesKeepSeparateInputs(): Unit = {
+    val builder = createBuilder(
+      source(1, Array(2, 3)),
+      ForeachOperatorFromJson(2, Array(1), Array(4), "loop", "foreach",
+        ForeachOperatorFromJson.Data("(x: Any) => true")),
+      ForeachOperatorFromJson(3, Array(1), Array(4), "loop", "foreach",
+        ForeachOperatorFromJson.Data("(x: Any) => true")),
+      UnionOperatorFromJson(4, Array(2, 3), Array.empty, "binary", "union")
+    )
+    val result = builder.execute()
+
+    // foreach returns its input, so different JSON IDs can otherwise alias the same output.
+    assertNotSame(input(result.operator, 0), input(result.operator, 1))
+    assertEquals(List("alpha", "alpha", "alpha", "alpha", "beta", "beta"),
+      result.collect().toList.map(_.toString).sorted)
+  }
+
+  @Test
+  def testSharedForeachPreservesActions(): Unit = {
+    val actions = directory.resolve("actions.txt")
+    val udf = s"""(x: Any) => {
+      java.nio.file.Files.write(
+        java.nio.file.Paths.get(java.net.URI.create("${actions.toUri}")),
+        (x.toString + System.lineSeparator()).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+        java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+      true
+    }"""
+    val builder = createBuilder(
+      source(1, Array(2)),
+      ForeachOperatorFromJson(2, Array(1), Array(3, 4), "loop", "foreach", ForeachOperatorFromJson.Data(udf)),
+      DistinctOperatorFromJson(3, Array(2), Array(5), "unary", "distinct"),
+      DistinctOperatorFromJson(4, Array(2), Array(5), "unary", "distinct"),
+      UnionOperatorFromJson(5, Array(3, 4), Array.empty, "binary", "union")
+    )
+    val result = builder.execute()
+
+    // Building each branch triggers foreach; caching must not suppress either action.
+    assertEquals(List("alpha", "alpha", "alpha", "alpha", "beta", "beta"),
+      Files.readAllLines(actions, StandardCharsets.UTF_8).asScala.toList.sorted)
+    assertEquals(List("alpha", "alpha", "beta", "beta"),
       result.collect().toList.map(_.toString).sorted)
   }
 
