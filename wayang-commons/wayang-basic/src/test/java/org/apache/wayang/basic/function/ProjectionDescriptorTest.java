@@ -22,10 +22,12 @@ import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.types.RecordType;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for the {@link ProjectionDescriptor}.
@@ -63,6 +65,98 @@ class ProjectionDescriptorTest {
                 new Record("world", 10),
                 javaImplementation.apply(new Record(10, "hello", "world"))
         );
+    }
+
+    @Test
+    void testMultiFieldPojoProjectionByName() {
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByNames(Pojo.class, "string", "integer");
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertEquals(
+                new Record("testValue", 1),
+                implementation.apply(new Pojo("testValue", 1))
+        );
+    }
+
+    @Test
+    void testMultiFieldPojoProjectionReordersFields() {
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByNames(Pojo.class, "integer", "string");
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertEquals(
+                new Record(42, "hello"),
+                implementation.apply(new Pojo("hello", 42))
+        );
+    }
+
+    @Test
+    void testMultiFieldPojoProjectionWithNulls() {
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByNames(Pojo.class, "string", "integer");
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertEquals(
+                new Record(null, 0),
+                implementation.apply(new Pojo(null, 0))
+        );
+    }
+
+    @Test
+    void testPojoProjectionByIndex() {
+        // Pojo declares: string (index 0), integer (index 1)
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByIndexes(Pojo.class, 1, 0);
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertEquals(
+                new Record(99, "abc"),
+                implementation.apply(new Pojo("abc", 99))
+        );
+        assertEquals(Arrays.asList("integer", "string"), descriptor.getFieldNames());
+    }
+
+    @Test
+    void testPojoProjectionByIndexSingleField() {
+        // Pojo declares: string (index 0), integer (index 1)
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByIndexes(Pojo.class, 0);
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertEquals(
+                new Record("hello"),
+                implementation.apply(new Pojo("hello", 5))
+        );
+        assertEquals(Arrays.asList("string"), descriptor.getFieldNames());
+    }
+
+    @Test
+    void testPojoProjectionByIndexOutOfBounds() {
+        assertThrows(IllegalArgumentException.class, () ->
+                ProjectionDescriptor.createForPojoByIndexes(Pojo.class, 5));
+    }
+
+    @Test
+    void testPojoProjectionByNameNonexistentField() {
+        final ProjectionDescriptor<Pojo, Record> descriptor =
+                ProjectionDescriptor.createForPojoByNames(Pojo.class, "string", "nonexistent");
+        final Function<Pojo, Record> implementation = descriptor.getJavaImplementation();
+
+        assertThrows(IllegalStateException.class, () ->
+                implementation.apply(new Pojo("test", 1)));
+    }
+
+    @Test
+    void testPojoProjectionEmptyFieldNames() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new ProjectionDescriptor<>(Pojo.class, Record.class));
+    }
+
+    @Test
+    void testPojoProjectionByIndexEmpty() {
+        assertThrows(IllegalArgumentException.class, () ->
+                ProjectionDescriptor.createForPojoByIndexes(Pojo.class));
     }
 
     public static class Pojo {
