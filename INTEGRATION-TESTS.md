@@ -16,16 +16,16 @@
   limitations under the License.
 -->
 
-# Integration Tests – Presto
+# Integration Tests – SQL Platforms
 
-End-to-end tests that drive the Presto platform operators (TableSource, Filter,
-Projection, Join) through the Wayang API against a live PrestoDB cluster.
+End-to-end tests that drive JDBC platform operators through the Wayang API
+against a user-managed database. Each suite **skips** (it does not fail) when
+the server is unreachable.
 
 | Test | Module | Needs |
 |------|--------|-------|
-| `AllOperatorsIT` | `wayang-presto` | a local Presto (Docker) |
-
-The test **skips** (it does not fail) when Presto is unreachable.
+| `PrestoOperatorsIT` | `wayang-presto` | a Presto deployment |
+| `ClickHouseOperatorsIT` | `wayang-clickhouse` | a ClickHouse deployment |
 
 ---
 
@@ -74,17 +74,36 @@ Connection settings are supplied through `PRESTO_HOST`, `PRESTO_PORT`, and
 
 ---
 
+## ClickHouse
+
+The test creates and seeds its own `wayang_it` database/tables in a user-managed
+ClickHouse deployment, then drops the fixtures afterward.
+
+```bash
+CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8123 CLICKHOUSE_USER=default \
+JAVA_HOME=/path/to/jdk-17 \
+./mvnw -Pskip-prerequisite-check -pl wayang-platforms/wayang-clickhouse -am \
+  -Dtest=ClickHouseOperatorsIT -Dsurefire.failIfNoSpecifiedTests=false \
+  -DfailIfNoTests=false \
+  -Drat.skip=true -Dlicense.skip=true -Dmaven.javadoc.skip=true test
+```
+
+Connection settings are supplied through `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`,
+`CLICKHOUSE_USER`, and optional `CLICKHOUSE_PASSWORD`. Applications use
+`wayang.clickhouse.jdbc.*` properties instead.
+
 ## Notes
 
 - **Pushdown is cost-gated.** On tiny tables Wayang's optimizer prefers a full
   scan + Java-side filter/projection, so pushdown only appears once a table is
-  large enough (hence the test scales to 120k rows). Each test asserts both correct
-  results and that the expected SQL reached Presto (`system.runtime.queries`).
+  large enough (hence the test scales to 120k rows). Presto tests also assert
+  that the expected SQL reached the server (`system.runtime.queries`).
 - **Join.** A JDBC join is verified through the operator's SQL-clause contract
-  executed on Presto, not the high-level `WayangContext` API — the logical
-  `JoinOperator` emits `Tuple2<Record,Record>`, which cannot connect to a `Record`
-  sink before the SQL pushdown flattens it.
-- **Trailing semicolons.** Presto's SQL parser rejects a trailing `;` in
-  `executeQuery`, so this branch also carries the jdbc-template change that stops
-  emitting one (shared with the other JDBC platforms; Postgres/SQLite tolerate its
-  absence).
+  executed on the platform, not the high-level `WayangContext` API alone — the
+  logical `JoinOperator` emits `Tuple2<Record,Record>`, which cannot connect to a
+  `Record` sink before the SQL pushdown flattens it.
+- **Trailing semicolons.** Strict SQL parsers (Presto, Trino, BigQuery,
+  ClickHouse JDBC in some modes) reject a trailing `;` in `executeQuery`, so
+  `wayang-jdbc-template` does not emit one.
+- **ClickHouse table sinks.** Overwrite mode emits
+  `CREATE TABLE ... ENGINE = MergeTree ORDER BY tuple() AS SELECT ...`.

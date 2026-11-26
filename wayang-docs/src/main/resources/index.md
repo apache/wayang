@@ -49,6 +49,7 @@ Wayang has built in support for the following frameworks:
 - Trino
 - Presto
 - Google BigQuery
+- ClickHouse
 - TensorFlow (Deep Learning)
 - Apache Giraph v1.2.0
 
@@ -95,6 +96,7 @@ Add the platform adapters you wish to target:
 - `wayang-postgres` / `wayang-sqlite3` / `wayang-generic-jdbc`: Relational database platforms
 - `wayang-trino` / `wayang-presto`: Distributed SQL query engines
 - `wayang-bigquery`: Google BigQuery cloud data warehouse
+- `wayang-clickhouse`: ClickHouse OLAP database
 - `wayang-tensorflow`: TensorFlow deep learning platform
 - `wayang-giraph`: Graph processing platform
 
