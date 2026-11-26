@@ -48,6 +48,7 @@ import org.apache.wayang.basic.data.Record;
 
 import java.nio.file.{Files, Paths}
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 class JsonPlanBuilder() {
 
@@ -147,51 +148,65 @@ class JsonPlanBuilder() {
     if (outputOperators.isEmpty)
       outputOperators = operators.values.filter(operator => operator.output.length == 0).toList
     val outputOperator = outputOperators.head
-    executeRecursive(outputOperator, planBuilder)
-  }
 
-  private def executeRecursive(operator: OperatorFromJson, planBuilder: PlanBuilder): DataQuanta[Any] = {
-    operator match {
-      // input
-      case inputOperator: TextFileInputFromJson => visit(inputOperator, planBuilder)
-      case inputOperator: ParquetInputFromJson => visit(inputOperator, planBuilder)
-      case inputOperator: InputCollectionFromJson => visit(inputOperator, planBuilder)
-      case inputOperator: TableInputFromJson => visit(inputOperator, planBuilder)
-      case inputOperator: JDBCRemoteInputFromJson => visit(inputOperator, planBuilder)
+    // The executor cannot yet feed the same channel into multiple inputs of one operator.
+    // Keep constructing separate inputs in that case, while sharing ancestors across branches.
+    val repeatedInputIds = operators.values.flatMap { operator =>
+      operator.input.groupBy(identity).collect { case (id, inputs) if inputs.length > 1 => id }
+    }.toSet
+    // Scope the constructed operators to this execution so later calls build a fresh plan.
+    val dataQuantaById = mutable.Map.empty[Long, DataQuanta[Any]]
 
-      // output
-      case outputOperator: TextFileOutputFromJson => visit(outputOperator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-
-      // unary
-      case operator: MapOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: FilterOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: FlatMapOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: ReduceByOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: CountOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: GroupByOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: SortOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: DistinctOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: ReduceOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: SampleOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: MapPartitionsOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-
-      // binary
-      case operator: UnionOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: JoinOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: CartesianOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: CoGroupOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: IntersectOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: PredictOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-      case operator: DLTrainingOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder), executeRecursive(this.operators(operator.input(1)), planBuilder))
-
-      // loop
-      case operator: DoWhileOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: RepeatOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-      case operator: ForeachOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
-
-      // Other
-      case operator: KMeansFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0)), planBuilder))
+    def executeRecursive(operator: OperatorFromJson): DataQuanta[Any] = {
+      if (repeatedInputIds.contains(operator.id)) buildOperator(operator)
+      else dataQuantaById.getOrElseUpdate(operator.id, buildOperator(operator))
     }
+
+    def buildOperator(operator: OperatorFromJson): DataQuanta[Any] = {
+      operator match {
+        // input
+        case inputOperator: TextFileInputFromJson => visit(inputOperator, planBuilder)
+        case inputOperator: ParquetInputFromJson => visit(inputOperator, planBuilder)
+        case inputOperator: InputCollectionFromJson => visit(inputOperator, planBuilder)
+        case inputOperator: TableInputFromJson => visit(inputOperator, planBuilder)
+        case inputOperator: JDBCRemoteInputFromJson => visit(inputOperator, planBuilder)
+
+        // output
+        case outputOperator: TextFileOutputFromJson => visit(outputOperator, executeRecursive(this.operators(operator.input(0))))
+
+        // unary
+        case operator: MapOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: FilterOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: FlatMapOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: ReduceByOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: CountOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: GroupByOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: SortOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: DistinctOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: ReduceOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: SampleOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: MapPartitionsOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+
+        // binary
+        case operator: UnionOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: JoinOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: CartesianOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: CoGroupOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: IntersectOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: PredictOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+        case operator: DLTrainingOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))), executeRecursive(this.operators(operator.input(1))))
+
+        // loop
+        case operator: DoWhileOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: RepeatOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+        case operator: ForeachOperatorFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+
+        // Other
+        case operator: KMeansFromJson => this.visit(operator, executeRecursive(this.operators(operator.input(0))))
+      }
+    }
+
+    executeRecursive(outputOperator)
   }
 
   //
