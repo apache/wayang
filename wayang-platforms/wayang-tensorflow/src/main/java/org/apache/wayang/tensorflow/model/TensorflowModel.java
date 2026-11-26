@@ -46,6 +46,7 @@ public class TensorflowModel extends DLModel implements AutoCloseable {
     private final Session session;
     private final Map<Integer, Operand<?>> opMap;
     private final org.tensorflow.op.Op minimize;
+    private final List<Result> pendingResults = new ArrayList<>();
 
     public TensorflowModel(DLModel model, Op criterion, Optimizer optimizer, Op accuracyCalculation) {
         super(model.getOut());
@@ -95,11 +96,12 @@ public class TensorflowModel extends DLModel implements AutoCloseable {
                 try (
                         Tensor tx = Convertor.ndArrayToTensor(x_);
                         Tensor ty = Convertor.ndArrayToTensor(y_);
+                        Tensor training = TBool.scalarOf(true);
                 ) {
                     Session.Runner runner = session.runner()
                             .feed(Input.Type.FEATURES.getName(), tx)
                             .feed(Input.Type.LABEL.getName(), ty)
-                            .feed(trainingMode, TBool.scalarOf(true))
+                            .feed(trainingMode, training)
                             .addTarget(minimize)
                             .fetch(criterion.getName());
                     if (accuracyCalculation != null) {
@@ -125,14 +127,18 @@ public class TensorflowModel extends DLModel implements AutoCloseable {
     public
     <XT extends NdArray<?>, PT extends NdArray<?> & TType>
     PT predict(XT x) {
-        try (Tensor tx = Convertor.ndArrayToTensor(x)) {
-            Tensor predicted = session.runner()
+        try (Tensor tx = Convertor.ndArrayToTensor(x);
+             Tensor training = TBool.scalarOf(false)) {
+            Result result = session.runner()
                     .feed(Input.Type.FEATURES.getName(), tx)
-                    .feed(trainingMode, TBool.scalarOf(false))
+                    .feed(trainingMode, training)
                     .fetch(out.getName())
-                    .run() // will be closed by global resource manager
-                    .get(0);
-            return (PT) predicted;
+                    .run();
+            // The result owns the fetched tensor and must be closed together with it.
+            // Keep it until the model is closed so that native memory is released
+            // deterministically instead of by the garbage collector at JVM shutdown.
+            this.pendingResults.add(result);
+            return (PT) result.get(0);
         }
     }
 
@@ -150,6 +156,10 @@ public class TensorflowModel extends DLModel implements AutoCloseable {
 
     @Override
     public void close() {
+        for (Result result : this.pendingResults) {
+            result.close();
+        }
+        this.pendingResults.clear();
         session.close();
         graph.close();
     }

@@ -48,10 +48,11 @@ public class TensorflowOperatorTest {
             Mean mean = new Mean(0, "mean");
             Operand<TFloat32> x = tf.array(1.0f, 2.0f, 3.0f);
             Operand<?> out = Convertor.convert(tf, mean, x);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            float ans = tensor.getFloat();
-            System.out.println(ans);
-            Assertions.assertEquals(2.0f, ans);
+            try (Result result = session.runner().fetch(out).run()) {
+                float ans = ((TFloat32) result.get(0)).getFloat();
+                System.out.println(ans);
+                Assertions.assertEquals(2.0f, ans);
+            }
         }
     }
 
@@ -62,14 +63,16 @@ public class TensorflowOperatorTest {
             Softmax softmax = new Softmax("softmax");
             Operand<TFloat32> x = tf.array(0f, 0f);
             Operand<?> out = Convertor.convert(tf, softmax, x);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            float[] ans = {
-                    tensor.getFloat(0),
-                    tensor.getFloat(1),
-            };
-            System.out.println(Arrays.toString(ans));
-            float[] expected = {0.5f, 0.5f};
-            Assertions.assertArrayEquals(expected, ans);
+            try (Result result = session.runner().fetch(out).run()) {
+                TFloat32 tensor = (TFloat32) result.get(0);
+                float[] ans = {
+                        tensor.getFloat(0),
+                        tensor.getFloat(1),
+                };
+                System.out.println(Arrays.toString(ans));
+                float[] expected = {0.5f, 0.5f};
+                Assertions.assertArrayEquals(expected, ans);
+            }
         }
     }
 
@@ -81,10 +84,11 @@ public class TensorflowOperatorTest {
             Operand<TFloat32> x = tf.array(1.0f, 1.0f, 1.0f);
             Operand<TFloat32> y = tf.array(2.0f, 2.0f, 2.0f);
             Operand<?> out = Convertor.convert(tf, mse, x, y);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            float ans = tensor.getFloat();
-            System.out.println(ans);
-            Assertions.assertEquals(1.0f, ans);
+            try (Result result = session.runner().fetch(out).run()) {
+                float ans = ((TFloat32) result.get(0)).getFloat();
+                System.out.println(ans);
+                Assertions.assertEquals(1.0f, ans);
+            }
         }
     }
 
@@ -101,10 +105,11 @@ public class TensorflowOperatorTest {
                     }}}
             );
             Operand<?> out = Convertor.convert(tf, conv2D, x);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            long[] shape = tensor.shape().asArray();
-            System.out.println(Arrays.toString(shape));
-            Assertions.assertArrayEquals(new long[]{1, 3, 2, 2}, shape);
+            try (Result result = session.runner().fetch(out).run()) {
+                long[] shape = result.get(0).shape().asArray();
+                System.out.println(Arrays.toString(shape));
+                Assertions.assertArrayEquals(new long[]{1, 3, 2, 2}, shape);
+            }
         }
     }
 
@@ -124,10 +129,11 @@ public class TensorflowOperatorTest {
                     }}}
             );
             Operand<?> out = Convertor.convert(tf, conv3D, x);
-            TFloat32 tensor = (TFloat32) session.runner().fetch("conv3d").run().get(0);
-            long[] shape = tensor.shape().asArray();
-            System.out.println(Arrays.toString(shape));
-            Assertions.assertArrayEquals(new long[]{1, 3, 2, 2, 2}, shape);
+            try (Result result = session.runner().fetch("conv3d").run()) {
+                long[] shape = result.get(0).shape().asArray();
+                System.out.println(Arrays.toString(shape));
+                Assertions.assertArrayEquals(new long[]{1, 3, 2, 2, 2}, shape);
+            }
         }
     }
 
@@ -141,10 +147,11 @@ public class TensorflowOperatorTest {
                     new float[][][][][]{{{one}, {one}}}
             );
             Operand<?> out = Convertor.convert(tf, convLSTM2D, input);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            long[] shape = tensor.shape().asArray();
-            System.out.println(Arrays.toString(shape));
-            Assertions.assertArrayEquals(new long[]{1, 2, 2, 3, 3}, shape);
+            try (Result result = session.runner().fetch(out).run()) {
+                long[] shape = result.get(0).shape().asArray();
+                System.out.println(Arrays.toString(shape));
+                Assertions.assertArrayEquals(new long[]{1, 2, 2, 3, 3}, shape);
+            }
         }
     }
 
@@ -153,13 +160,6 @@ public class TensorflowOperatorTest {
         try (Graph g = new Graph(); Session session = new Session(g)) {
             Ops tf = Ops.create(g);
             BatchNorm2D batchNorm2D = new BatchNorm2D(1, 1e-5f, 0.1f);
-//            Operand<TFloat32> tensor = tf.constant(
-//                    new float[][][][]{{{
-//                            {1.0f, 2.0f, 3.0f},
-//                            {1.0f, 2.0f, 3.0f},
-//                            {1.0f, 2.0f, 3.0f}
-//                    }}}
-//            );
 
             FloatNdArray tensor = NdArrays.ofFloats(Shape.of(1, 1, 3, 3))
                     .set(NdArrays.vectorOf(1.0f, 2.0f, 3.0f), 0, 0, 0)
@@ -169,36 +169,32 @@ public class TensorflowOperatorTest {
             Placeholder<TFloat32> x = tf.placeholder(TFloat32.class, Placeholder.shape(Shape.of(1, 1, 3, 3)));
             Placeholder<TBool> trainingMode = tf.placeholder(TBool.class);
             Operand<?> out = Convertor.convert(g, tf, batchNorm2D, x, trainingMode);
-            Result result1 = session.runner().feed(trainingMode, TBool.scalarOf(true)).feed(x, TFloat32.tensorOf(tensor))
-                    .fetch("BatchNorm2DRunningMean")
-                    .fetch("BatchNorm2DRunningVar")
-                    .fetch(out)
-                    .run();
-            Result result2 = session.runner().feed(trainingMode, TBool.scalarOf(false)).feed(x, TFloat32.tensorOf(tensor))
-                    .fetch("BatchNorm2DRunningMean")
-                    .fetch("BatchNorm2DRunningVar")
-                    .fetch(out)
-                    .run();
-//            TFloat32 tensor1 = (TFloat32) result1.get(2);
-//            TFloat32 tensor2 = (TFloat32) result2.get(2);
-//            float[] ans1 = new float[] {
-//                    tensor1.getFloat(0, 0, 0, 0),
-//                    tensor1.getFloat(0, 0, 0, 1),
-//                    tensor1.getFloat(0, 0, 0, 2)
-//            };
-//            float[] ans2 = new float[] {
-//                    tensor2.getFloat(0, 0, 0, 0),
-//                    tensor2.getFloat(0, 0, 0, 1),
-//                    tensor2.getFloat(0, 0, 0, 2)
-//            };
-            float[] ans1 = new float[] {
-                    ((TFloat32) result1.get(0)).getFloat(0),
-                    ((TFloat32) result1.get(1)).getFloat(0)
-            };
-            float[] ans2 = new float[] {
-                    ((TFloat32) result2.get(0)).getFloat(0),
-                    ((TFloat32) result2.get(1)).getFloat(0)
-            };
+            float[] ans1;
+            try (TFloat32 input = TFloat32.tensorOf(tensor);
+                 TBool training = TBool.scalarOf(true);
+                 Result result1 = session.runner().feed(trainingMode, training).feed(x, input)
+                         .fetch("BatchNorm2DRunningMean")
+                         .fetch("BatchNorm2DRunningVar")
+                         .fetch(out)
+                         .run()) {
+                ans1 = new float[] {
+                        ((TFloat32) result1.get(0)).getFloat(0),
+                        ((TFloat32) result1.get(1)).getFloat(0)
+                };
+            }
+            float[] ans2;
+            try (TFloat32 input = TFloat32.tensorOf(tensor);
+                 TBool inference = TBool.scalarOf(false);
+                 Result result2 = session.runner().feed(trainingMode, inference).feed(x, input)
+                         .fetch("BatchNorm2DRunningMean")
+                         .fetch("BatchNorm2DRunningVar")
+                         .fetch(out)
+                         .run()) {
+                ans2 = new float[] {
+                        ((TFloat32) result2.get(0)).getFloat(0),
+                        ((TFloat32) result2.get(1)).getFloat(0)
+                };
+            }
             System.out.println(Arrays.toString(ans1));
             System.out.println(Arrays.toString(ans2));
             Assertions.assertArrayEquals(ans1, ans2);
@@ -225,24 +221,30 @@ public class TensorflowOperatorTest {
             );
             Placeholder<TBool> trainingMode = tf.placeholder(TBool.class);
             Operand<?> out = Convertor.convert(g, tf, batchNorm3D, x, trainingMode);
-            Result result1 = session.runner().feed(trainingMode, TBool.scalarOf(true))
-                    .fetch("BatchNorm2DRunningMean")
-                    .fetch("BatchNorm2DRunningVar")
-                    .fetch(out)
-                    .run();
-            Result result2 = session.runner().feed(trainingMode, TBool.scalarOf(false))
-                    .fetch("BatchNorm2DRunningMean")
-                    .fetch("BatchNorm2DRunningVar")
-                    .fetch(out)
-                    .run();
-            float[] ans1 = new float[] {
-                    ((TFloat32) result1.get(0)).getFloat(0),
-                    ((TFloat32) result1.get(1)).getFloat(0)
-            };
-            float[] ans2 = new float[] {
-                    ((TFloat32) result2.get(0)).getFloat(0),
-                    ((TFloat32) result2.get(1)).getFloat(0)
-            };
+            float[] ans1;
+            try (TBool training = TBool.scalarOf(true);
+                 Result result1 = session.runner().feed(trainingMode, training)
+                         .fetch("BatchNorm2DRunningMean")
+                         .fetch("BatchNorm2DRunningVar")
+                         .fetch(out)
+                         .run()) {
+                ans1 = new float[] {
+                        ((TFloat32) result1.get(0)).getFloat(0),
+                        ((TFloat32) result1.get(1)).getFloat(0)
+                };
+            }
+            float[] ans2;
+            try (TBool inference = TBool.scalarOf(false);
+                 Result result2 = session.runner().feed(trainingMode, inference)
+                         .fetch("BatchNorm2DRunningMean")
+                         .fetch("BatchNorm2DRunningVar")
+                         .fetch(out)
+                         .run()) {
+                ans2 = new float[] {
+                        ((TFloat32) result2.get(0)).getFloat(0),
+                        ((TFloat32) result2.get(1)).getFloat(0)
+                };
+            }
             System.out.println(Arrays.toString(ans1));
             System.out.println(Arrays.toString(ans2));
             Assertions.assertArrayEquals(ans1, ans2);
@@ -266,13 +268,15 @@ public class TensorflowOperatorTest {
                     }
             );
             Operand<?> out = Convertor.convert(tf, slice, input);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            long[] shape = tensor.shape().asArray();
-            System.out.println(Arrays.toString(shape));
-            Assertions.assertArrayEquals(new long[]{1, 1}, shape);
-            float ans = tensor.getFloat(0, 0);
-            System.out.println(ans);
-            Assertions.assertEquals(6.0f, ans);
+            try (Result result = session.runner().fetch(out).run()) {
+                TFloat32 tensor = (TFloat32) result.get(0);
+                long[] shape = tensor.shape().asArray();
+                System.out.println(Arrays.toString(shape));
+                Assertions.assertArrayEquals(new long[]{1, 1}, shape);
+                float ans = tensor.getFloat(0, 0);
+                System.out.println(ans);
+                Assertions.assertEquals(6.0f, ans);
+            }
         }
     }
 
@@ -286,10 +290,11 @@ public class TensorflowOperatorTest {
             Operand<?> map = tf.emptyTensorMap();
             map = tf.tensorMapInsert(map, tf.constant(key), value);
             Operand<?> out = Convertor.convert(tf, get, map);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            float ans = tensor.getFloat();
-            System.out.println(ans);
-            Assertions.assertEquals(1.0f, ans);
+            try (Result result = session.runner().fetch(out).run()) {
+                float ans = ((TFloat32) result.get(0)).getFloat();
+                System.out.println(ans);
+                Assertions.assertEquals(1.0f, ans);
+            }
         }
     }
 
@@ -305,10 +310,11 @@ public class TensorflowOperatorTest {
             Operand<TFloat32> input = tf.constant(matrix);
             Reshape reshape = new Reshape(new int[]{-1});
             Operand<?> out = Convertor.convert(tf, reshape, input);
-            TFloat32 tensor = (TFloat32) session.runner().fetch(out).run().get(0);
-            long[] shape = tensor.shape().asArray();
-            System.out.println(Arrays.toString(shape));
-            Assertions.assertArrayEquals(new long[]{9}, shape);
+            try (Result result = session.runner().fetch(out).run()) {
+                long[] shape = result.get(0).shape().asArray();
+                System.out.println(Arrays.toString(shape));
+                Assertions.assertArrayEquals(new long[]{9}, shape);
+            }
         }
     }
 
@@ -322,11 +328,16 @@ public class TensorflowOperatorTest {
                     tf.assignAdd(x, input)
             ).identity(x);
 
-            session.runner().feed(input, TFloat32.vectorOf(1.0f)).fetch(out).fetch(x).run().get(1);
-            TFloat32 tensor = (TFloat32) session.runner().feed(input, TFloat32.vectorOf(1.0f)).fetch(out).fetch(x).run().get(1);
-            float ans = tensor.getFloat(0);
-            System.out.println(ans);
-            Assertions.assertEquals(2.0f, ans);
+            try (TFloat32 firstInput = TFloat32.vectorOf(1.0f);
+                 Result firstResult = session.runner().feed(input, firstInput).fetch(out).fetch(x).run()) {
+                firstResult.get(1);
+            }
+            try (TFloat32 secondInput = TFloat32.vectorOf(1.0f);
+                 Result secondResult = session.runner().feed(input, secondInput).fetch(out).fetch(x).run()) {
+                float ans = ((TFloat32) secondResult.get(1)).getFloat(0);
+                System.out.println(ans);
+                Assertions.assertEquals(2.0f, ans);
+            }
         }
     }
 
@@ -359,11 +370,16 @@ public class TensorflowOperatorTest {
                     )
             ).iterator().next();
 
-            session.runner().feed(trainingMode, TBool.scalarOf(true)).fetch(out).fetch("xxx").run();
-            TFloat32 tensor = (TFloat32) session.runner().feed(trainingMode, TBool.scalarOf(false)).fetch(out).fetch("xxx").run().get(0);
-            float ans = tensor.getFloat(0);
-            System.out.println(ans);
-            Assertions.assertEquals(9.0f, ans);
+            try (TBool training = TBool.scalarOf(true);
+                 Result trainingResult = session.runner().feed(trainingMode, training).fetch(out).fetch("xxx").run()) {
+                trainingResult.get(0);
+            }
+            try (TBool inference = TBool.scalarOf(false);
+                 Result inferenceResult = session.runner().feed(trainingMode, inference).fetch(out).fetch("xxx").run()) {
+                float ans = ((TFloat32) inferenceResult.get(0)).getFloat(0);
+                System.out.println(ans);
+                Assertions.assertEquals(9.0f, ans);
+            }
         }
     }
 }
