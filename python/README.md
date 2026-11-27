@@ -34,7 +34,7 @@ system.
 After building the python package, execute the following steps to make
 it available for your system:
 ```shell
-python3 -m pip install dist/pywy-1.0.0.tar.gz
+python3 -m pip install dist/pywy-1.1.1.tar.gz
 ```
 
 ## Executing python code
@@ -56,7 +56,7 @@ wayang.api.python.env.path = /usr/local/lib/python3.8/dist-packages
 The first configuration value needs to point to the location of your
 apache wayang repository so that it can find the python worker that
 executes UDFs (usually your current work directory +
-`python/src/pypy/execution/worker.py`)
+`python/src/pywy/execution/worker.py`)
 The second value is your command used for invoking python scripts.
 Usually either python3 or just python.
 The third value points to the directory in which python libraries are to
@@ -70,8 +70,8 @@ be found (usually where pip installs them).
 - Starting the REST API as a background process
 ```shell
 cd wayang-assembly/target/
-tar -xvf apache-wayang-assembly-1.0.0-dist.tar.gz
-cd wayang-1.0.0
+tar -xvf apache-wayang-assembly-1.1.1-dist.tar.gz
+cd wayang-1.1.1
 ./bin/wayang-submit org.apache.wayang.api.json.Main &
 ```
 

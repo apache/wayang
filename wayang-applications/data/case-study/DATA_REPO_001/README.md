@@ -55,7 +55,6 @@ Apache Wayang aims at freeing data engineers and software developers from the bu
 - [Apache Spark](https://spark.apache.org/)
 - [Apache Flink](https://flink.apache.org/)
 - [Apache Giraph](https://giraph.apache.org/)
-- [GraphChi](https://github.com/GraphChi/graphchi-java)
 - [Postgres](http://www.postgresql.org)
 - [SQLite](https://www.sqlite.org/)
 
@@ -79,8 +78,8 @@ You first have to build the binaries as shown [here](guides/tutorial.md).
 Once you have the binaries built, follow these steps to install Wayang:
 
 ```shell
-tar -xvf wayang-0.7.1-snapshot.tar.gz
-cd wayang-0.7.1-SNAPSHOT
+tar -xvf wayang-1.1.1.tar.gz
+cd wayang-1.1.1
 ```
 
 In linux
@@ -100,8 +99,8 @@ source ~/.zshrc
 
 Since Apache Wayang is not an execution engine itself but rather manages the execution engines for you, it is important to have the necessary requirements installed.
 
-- Apache Wayang supports Java versions 8 and above. However, the Wayang team recommends using Java version 11. Don’t forget to set the `JAVA_HOME` environment variable.
-- You need to install Apache Spark version 3 or higher. Don’t forget to set the `SPARK_HOME` environment variable.
+- Apache Wayang supports Java 17 and above. Don’t forget to set the `JAVA_HOME` environment variable.
+- You need to install Apache Spark 3.5.x. Don’t forget to set the `SPARK_HOME` environment variable.
 - You need to install Apache Hadoop version 3 or higher. Don’t forget to set the `HADOOP_HOME` environment variable.
 
 ### Validating the installation
@@ -119,7 +118,7 @@ Wayang is available via Maven Central. To use it with Maven, include the followi
 <dependency>
   <groupId>org.apache.wayang</groupId>
   <artifactId>wayang-***</artifactId>
-  <version>0.7.1</version>
+  <version>1.1.1</version>
 </dependency>
 ```
 Note the `***`: Wayang ships with multiple modules that can be included in your app, depending on how you want to use it:
@@ -129,7 +128,7 @@ Note the `***`: Wayang ships with multiple modules that can be included in your 
 * `wayang-java`, `wayang-spark`, `wayang-giraph`, `wayang-sqlite3`, `wayang-postgres`: adapters for the various supported processing platforms
 * `wayang-profiler`: provides functionality to learn operator and UDF cost functions from historical execution data
 
-> **NOTE:** The module `wayang-api-scala-java` is intended to be used with Java 11 and Scala 2.12.
+> **NOTE:** The module `wayang-api-scala-java` is intended to be used with Java 17 and Scala 2.12.
 
 For the sake of version flexibility, you still have to include in the POM file your Hadoop (`hadoop-hdfs` and `hadoop-common`) and Spark (`spark-core` and `spark-graphx`) version of choice.
 
@@ -145,15 +144,15 @@ In addition, you can obtain the most recent snapshot version of Wayang via Sonat
 ```
 
 ### Prerequisites
-Apache Wayang is built with Java 11 and Scala 2.12. However, to run Apache Wayang it is sufficient to have just Java 11 installed. Please also consider that processing platforms employed by Wayang might have further requirements.
+Apache Wayang is built with Java 17 and Scala 2.12. However, to run Apache Wayang it is sufficient to have just Java 17 installed. Please also consider that processing platforms employed by Wayang might have further requirements.
 ```
-Java 11
+Java 17
 [Scala 2.12]
 ```
 
 > **NOTE:** In windows, you need to define the variable `HADOOP_HOME` with the winutils.exe, an not official option to obtain [this repository](https://github.com/steveloughran/winutils), or you can generate your winutils.exe following the instructions in the repository. Also, you may need to install [msvcr100.dll](https://www.microsoft.com/en-us/download/details.aspx?id=26999)
 
-> **NOTE:** Make sure that the JAVA_HOME environment variable is set correctly to Java 11 as the prerequisite checker script currently supports up to Java 11 and checks the latest version of Java if you have higher version installed. In Linux, it is preferably to use the export JAVA_HOME method inside the project folder. It is also recommended running './mvnw clean install' before opening the project using IntelliJ.
+> **NOTE:** Make sure that the JAVA_HOME environment variable is set correctly to Java 17 as the prerequisite checker script currently supports up to Java 17 and checks the latest version of Java if you have higher version installed. In Linux, it is preferably to use the export JAVA_HOME method inside the project folder. It is also recommended running './mvnw clean install' before opening the project using IntelliJ.
 
 
 ### Building
@@ -169,13 +168,13 @@ If you need to rebuild Wayang, e.g., to use a different Scala version, you can s
     ```
 > **NOTE:** If you receive an error about not finding `MathExBaseVisitor`, then the problem might be that you are trying to build from IntelliJ, without Maven. MathExBaseVisitor is generated code, and a Maven build should generate it automatically.
 
-> **NOTE:** In the current Maven setup, the version of scala is tied to the Java version, you can compile the profile `scala-11` with Java 8 and profile `scala-12` with Java 11.
+> **NOTE:** In the current Maven setup, the version of scala is tied to the Java version, you can compile the profile `scala-12` with Java 17.
 
 > **NOTE:** For compiling and testing the code it is required to have Hadoop installed on your machine.
 
 > **NOTE:**  the `standalone` profile to fix Hadoop and Spark versions, so that Wayang apps do not explicitly need to declare the corresponding dependencies.
 >
-> Also, note the `distro` profile, which assembles a binary Wayang distribution.
+> Also, note the `distribution` profile, which assembles a binary Wayang distribution.
 To activate these profiles, you need to specify them when running maven, i.e.,
 
 ```shell
@@ -193,7 +192,7 @@ You can see examples on how to start using Wayang [here](guides/wayang-examples.
 
 ## Built With
 
-* [Java 11](https://www.oracle.com/de/java/technologies/javase/jdk11-archive-downloads.html)
+* [Java 17](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html)
 * [Scala 2.12](https://www.scala-lang.org/download/2.12.0.html)
 * [Maven](https://maven.apache.org/)
 
