@@ -167,9 +167,28 @@ public class ParquetSource extends UnarySource<Record> {
             CardinalityEstimate cardinalityEstimate = optimizationContext.queryJobCache(jobCacheKey, CardinalityEstimate.class);
             if (cardinalityEstimate != null) return cardinalityEstimate;
 
+            if (ParquetSource.this.metadata == null) {
+                ParquetSource.this.logger.warn("Could not inspect metadata of {}... deliver fallback estimate.",
+                        ParquetSource.this.inputUrl);
+                timeMeasurement.stop();
+                return this.FALLBACK_ESTIMATE;
+            }
+
             // Otherwise calculate the cardinality.
             // First, inspect the size of the file and its line sizes.
-            OptionalLong fileSize = FileSystems.getFileSize(ParquetSource.this.inputUrl);
+            OptionalLong fileSize;
+            try {
+                fileSize = FileSystems.getFileSize(ParquetSource.this.inputUrl);
+            } catch (Exception e) {
+                ParquetSource.this.logger.warn(
+                        "Could not determine size of {} ({}: {})... deliver fallback estimate.",
+                        ParquetSource.this.inputUrl,
+                        e.getClass().getSimpleName(),
+                        e.getMessage()
+                );
+                timeMeasurement.stop();
+                return this.FALLBACK_ESTIMATE;
+            }
             if (fileSize.isEmpty()) {
                 ParquetSource.this.logger.warn("Could not determine size of {}... deliver fallback estimate.",
                         ParquetSource.this.inputUrl);

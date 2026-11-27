@@ -20,15 +20,16 @@ package org.apache.wayang.jdbc.operators;
 
 import org.apache.wayang.core.util.Tuple;
 import org.apache.wayang.basic.data.Record;
+import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.types.DataSetType;
 import org.apache.wayang.basic.operators.JoinOperator;
 import org.apache.wayang.core.function.TransformationDescriptor;
 import org.apache.wayang.jdbc.compiler.FunctionCompiler;
-import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimator;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimators;
 
 import java.sql.Connection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -64,17 +65,17 @@ public abstract class JdbcJoinOperator<KeyType>
 
     @Override
     public String createSqlClause(Connection connection, FunctionCompiler compiler) {
-        return this.createSqlClause(connection, compiler, null);
+        return this.createSqlClause(connection, compiler, Map.of());
     }
 
-    @Override
-    public String createSqlClause(Connection connection, FunctionCompiler compiler, Configuration configuration) {
+    public String createSqlClause(Connection connection,
+                                  FunctionCompiler compiler,
+                                  Map<String, String> sourceNames) {
         final Tuple<String, String> left = this.keyDescriptor0.getSqlImplementation();
         final Tuple<String, String> right = this.keyDescriptor1.getSqlImplementation();
-        final String platformId = this.getPlatform().getPlatformId();
-        final String leftTableName = JdbcParquetSource.resolveSourceName(configuration, platformId, left.field0);
+        final String leftTableName = sourceNames.getOrDefault(left.field0, left.field0);
         final String leftKeys = left.field1;
-        final String rightTableName = JdbcParquetSource.resolveSourceName(configuration, platformId, right.field0);
+        final String rightTableName = sourceNames.getOrDefault(right.field0, right.field0);
         final String rightKeys = right.field1;
 
         if (leftKeys.contains(",") && rightKeys.contains(",")) {
