@@ -18,6 +18,7 @@
 package org.apache.wayang.api.sql;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,6 +29,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,6 +90,7 @@ import org.apache.wayang.core.function.FunctionDescriptor.SerializablePredicate;
 import org.apache.wayang.core.mapping.PlanTransformation;
 import org.apache.wayang.core.plan.wayangplan.Operator;
 import org.apache.wayang.core.plan.wayangplan.PlanTraversal;
+import org.apache.wayang.core.platform.Platform;
 import org.apache.wayang.core.plan.wayangplan.WayangPlan;
 import org.apache.wayang.core.util.Tuple;
 import org.apache.wayang.java.Java;
@@ -126,6 +129,47 @@ class SqlToWayangRelTest {
         objectInputStream.close();
 
         assertTrue(((FilterPredicateImpl) deserializedObject).test(new Record("test")));
+    }
+
+    @Test
+    void filterPredicateWithNullOperands() {
+        final RelDataTypeFactory typeFactory = new JavaTypeFactoryImpl();
+        final RexBuilder rb = new RexBuilder(typeFactory);
+        final RelDataType nullableInt = typeFactory.createTypeWithNullability(
+                typeFactory.createSqlType(SqlTypeName.INTEGER), true);
+        final RelDataType nullableString = typeFactory.createTypeWithNullability(
+                typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+        final RexNode five = rb.makeExactLiteral(BigDecimal.valueOf(5));
+        final RexNode firstAboveFive = rb.makeCall(SqlStdOperatorTable.GREATER_THAN,
+                rb.makeInputRef(nullableInt, 0), five);
+        final RexNode secondAboveFive = rb.makeCall(SqlStdOperatorTable.GREATER_THAN,
+                rb.makeInputRef(nullableInt, 1), five);
+
+        // NOT NULL is NULL, so the row is dropped
+        final FilterPredicateImpl notAboveFive = new FilterPredicateImpl(
+                rb.makeCall(SqlStdOperatorTable.NOT, firstAboveFive));
+        assertTrue(notAboveFive.test(new Record(3, 0)));
+        assertFalse(notAboveFive.test(new Record(null, 0)));
+
+        // NOT (NULL AND FALSE) is NOT FALSE, NOT (NULL AND TRUE) is NOT NULL
+        final FilterPredicateImpl notBoth = new FilterPredicateImpl(rb.makeCall(SqlStdOperatorTable.NOT,
+                rb.makeCall(SqlStdOperatorTable.AND, firstAboveFive, secondAboveFive)));
+        assertTrue(notBoth.test(new Record(null, 1)));
+        assertFalse(notBoth.test(new Record(null, 7)));
+
+        // NOT (NULL OR TRUE) is NOT TRUE, NOT (NULL OR FALSE) is NOT NULL
+        final FilterPredicateImpl notEither = new FilterPredicateImpl(rb.makeCall(SqlStdOperatorTable.NOT,
+                rb.makeCall(SqlStdOperatorTable.OR, firstAboveFive, secondAboveFive)));
+        assertFalse(notEither.test(new Record(null, 7)));
+        assertFalse(notEither.test(new Record(null, 1)));
+        assertTrue(notEither.test(new Record(1, 1)));
+
+        // a NULL string is neither LIKE nor NOT LIKE a pattern
+        final RexNode like = rb.makeCall(SqlStdOperatorTable.LIKE, rb.makeInputRef(nullableString, 0),
+                rb.makeLiteral("a%"));
+        assertFalse(new FilterPredicateImpl(like).test(new Record(null, 0)));
+        assertFalse(new FilterPredicateImpl(rb.makeCall(SqlStdOperatorTable.NOT, like)).test(new Record(null, 0)));
+        assertTrue(new FilterPredicateImpl(rb.makeCall(SqlStdOperatorTable.NOT, like)).test(new Record("b", 0)));
     }
 
     @Test
@@ -421,6 +465,141 @@ class SqlToWayangRelTest {
     }
 
     @Test
+    void javaAggregatesSkipNulls() throws Exception {
+        // col1 is 1, null, 3, null, 5, null: aggregates over col1 only see 1, 3 and 5
+        assertEquals(List.of(new Record(6)), this.executeOnNullGroups("SELECT COUNT(*) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(3)), this.executeOnNullGroups("SELECT COUNT(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(9)), this.executeOnNullGroups("SELECT SUM(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(3.0)), this.executeOnNullGroups("SELECT AVG(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(1)), this.executeOnNullGroups("SELECT MIN(col1) FROM fs.exampleNullGroups"));
+        assertEquals(List.of(new Record(5)), this.executeOnNullGroups("SELECT MAX(col1) FROM fs.exampleNullGroups"));
+    }
+
+    private List<Record> executeOnNullGroups(final String sql) throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext, sql);
+        sqlContext.execute(t.field1);
+
+        return new ArrayList<>(t.field0);
+    }
+
+    @Test
+    void javaGroupedAggregatesSkipNulls() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col2, COUNT(col1), SUM(col1), AVG(col1) FROM fs.exampleNullGroups GROUP BY col2");
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        sqlContext.execute(wayangPlan);
+
+        // group c only has a null, so its SUM and AVG are null as well
+        final List<Record> expected = List.of(
+                new Record("a", 1, 1, 1.0),
+                new Record("b", 2, 8, 4.0),
+                new Record("c", 0, null, null));
+        assertEquals(expected.size(), result.size());
+        assertTrue(result.containsAll(expected), "expected " + expected + ", got: " + result);
+    }
+
+    // exampleNull.csv has the rows (1, 10, a), (null, 20, b), (3, null, c) and (null, null, d)
+    private static final Record NULL_ROW_A = new Record(1, 10, "a");
+    private static final Record NULL_ROW_B = new Record(null, 20, "b");
+    private static final Record NULL_ROW_C = new Record(3, null, "c");
+    private static final Record NULL_ROW_D = new Record(null, null, "d");
+
+    @Test
+    void javaScanReadsEmptyFieldsAsNull() throws Exception {
+        assertSameRecords(List.of(NULL_ROW_A, NULL_ROW_B, NULL_ROW_C, NULL_ROW_D),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull", Java.platform()));
+    }
+
+    @Test
+    void javaFilterComparisonsSkipNulls() throws Exception {
+        // a comparison with NULL is unknown, so the row is dropped
+        assertSameRecords(List.of(NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 > 1", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 <> 1", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 + 1 > 2", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_A),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 BETWEEN 0 AND 2", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 NOT IN (1, 5)", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_B, NULL_ROW_D),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 IS NULL", Java.platform()));
+    }
+
+    @Test
+    void javaFilterThreeValuedLogic() throws Exception {
+        // NULL OR TRUE is TRUE, NULL OR FALSE is NULL
+        assertSameRecords(List.of(NULL_ROW_B, NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 > 1 OR col2 > 15", Java.platform()));
+        // NULL AND TRUE is NULL
+        assertSameRecords(List.of(NULL_ROW_A),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 < 5 AND col2 < 15", Java.platform()));
+        // NOT NULL is NULL
+        assertSameRecords(List.of(NULL_ROW_A), this.executeOnNulls(
+                "SELECT * FROM fs.exampleNull WHERE NOT (col1 > 1 AND col2 > 15)", Java.platform()));
+        assertSameRecords(List.of(NULL_ROW_A, NULL_ROW_B, NULL_ROW_D), this.executeOnNulls(
+                "SELECT * FROM fs.exampleNull WHERE col1 = 1 OR col1 IS NULL", Java.platform()));
+    }
+
+    @Test
+    void javaFilterSearchWithNulls() throws Exception {
+        // FILTER_INTO_JOIN simplifies these conditions into SEARCH($0, Sarg[...])
+        final String join = "SELECT a.col3, b.col3 FROM fs.exampleNull AS a JOIN fs.exampleNull AS b"
+                + " ON a.col3 = b.col3 WHERE ";
+        assertSameRecords(List.of(new Record("a", "a")),
+                this.executeOnNulls(join + "a.col1 BETWEEN 0 AND 2", Java.platform()));
+        // Sarg[1, 3; NULL AS TRUE]
+        assertSameRecords(
+                List.of(new Record("a", "a"), new Record("b", "b"), new Record("c", "c"), new Record("d", "d")),
+                this.executeOnNulls(join + "a.col1 IN (1, 3) OR a.col1 IS NULL", Java.platform()));
+    }
+
+    @Test
+    void javaProjectionWithNulls() throws Exception {
+        assertSameRecords(
+                List.of(new Record(11.0, 2.0), new Record(null, null), new Record(null, 6.0), new Record(null, null)),
+                this.executeOnNulls("SELECT col1 + col2, col1 * 2 FROM fs.exampleNull", Java.platform()));
+    }
+
+    @Test
+    void javaJoinSkipsNullKeys() throws Exception {
+        // NULL never equals NULL, so rows b and d do not join with each other
+        assertSameRecords(List.of(new Record("a", "a"), new Record("c", "c")), this.executeOnNulls(
+                "SELECT a.col3, b.col3 FROM fs.exampleNull AS a JOIN fs.exampleNull AS b ON a.col1 = b.col1",
+                Java.platform()));
+        assertSameRecords(List.of(new Record("a", "a")), this.executeOnNulls(
+                "SELECT a.col3, b.col3 FROM fs.exampleNull AS a JOIN fs.exampleNull AS b"
+                        + " ON a.col1 = b.col1 AND a.col2 = b.col2",
+                Java.platform()));
+    }
+
+    private List<Record> executeOnNulls(final String sql, final Platform platform) throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNull.csv");
+
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext, sql);
+        PlanTraversal.upstream().traverse(t.field1.getSinks()).getTraversedNodes()
+                .forEach(node -> node.addTargetPlatform(platform));
+        sqlContext.execute(t.field1);
+
+        return new ArrayList<>(t.field0);
+    }
+
+    private static void assertSameRecords(final List<Record> expected, final List<Record> actual) {
+        final Map<Record, Long> expectedTally = expected.stream()
+                .collect(Collectors.groupingBy(rec -> rec, Collectors.counting()));
+        final Map<Record, Long> actualTally = actual.stream()
+                .collect(Collectors.groupingBy(rec -> rec, Collectors.counting()));
+        assertEquals(expectedTally, actualTally, "expected " + expected + ", got: " + actual);
+    }
+
+    @Test
     void filterNotEqualsValue() throws Exception {
         final SqlContext sqlContext = this.createSqlContext("/data/largeLeftTableIndex.csv");
 
@@ -663,6 +842,53 @@ class SqlToWayangRelTest {
         sqlContext.execute(wayangPlan);
 
         assertTrue(result.stream().anyMatch(rec -> rec.equals(new Record("test1", "test1", "test2"))));
+    }
+
+    @Test
+    void sparkGroupedAggregatesSkipNulls() throws Exception {
+        final SqlContext sqlContext = this.createSqlContext("/data/exampleNullGroups.csv");
+        final Tuple2<Collection<Record>, WayangPlan> t = this.buildCollectorAndWayangPlan(sqlContext,
+                "SELECT col2, COUNT(col1), SUM(col1), AVG(col1) FROM fs.exampleNullGroups GROUP BY col2");
+        final Collection<Record> result = t.field0;
+        final WayangPlan wayangPlan = t.field1;
+
+        PlanTraversal.upstream().traverse(wayangPlan.getSinks()).getTraversedNodes()
+                .forEach(node -> node.addTargetPlatform(Spark.platform()));
+
+        sqlContext.execute(wayangPlan);
+
+        final List<Record> expected = List.of(
+                new Record("a", 1, 1, 1.0),
+                new Record("b", 2, 8, 4.0),
+                new Record("c", 0, null, null));
+        assertEquals(expected.size(), result.size());
+        assertTrue(result.containsAll(expected), "expected " + expected + ", got: " + result);
+    }
+
+    @Test
+    void sparkFilterThreeValuedLogic() throws Exception {
+        assertSameRecords(List.of(NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 <> 1", Spark.platform()));
+        assertSameRecords(List.of(NULL_ROW_B, NULL_ROW_C),
+                this.executeOnNulls("SELECT * FROM fs.exampleNull WHERE col1 > 1 OR col2 > 15", Spark.platform()));
+    }
+
+    @Test
+    void sparkProjectionWithNulls() throws Exception {
+        assertSameRecords(
+                List.of(new Record(11.0, 2.0), new Record(null, null), new Record(null, 6.0), new Record(null, null)),
+                this.executeOnNulls("SELECT col1 + col2, col1 * 2 FROM fs.exampleNull", Spark.platform()));
+    }
+
+    @Test
+    void sparkJoinSkipsNullKeys() throws Exception {
+        assertSameRecords(List.of(new Record("a", "a"), new Record("c", "c")), this.executeOnNulls(
+                "SELECT a.col3, b.col3 FROM fs.exampleNull AS a JOIN fs.exampleNull AS b ON a.col1 = b.col1",
+                Spark.platform()));
+        assertSameRecords(List.of(new Record("a", "a")), this.executeOnNulls(
+                "SELECT a.col3, b.col3 FROM fs.exampleNull AS a JOIN fs.exampleNull AS b"
+                        + " ON a.col1 = b.col1 AND a.col2 = b.col2",
+                Spark.platform()));
     }
 
     @Test

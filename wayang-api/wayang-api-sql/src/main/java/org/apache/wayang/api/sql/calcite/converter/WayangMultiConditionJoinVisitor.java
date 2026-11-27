@@ -116,8 +116,9 @@ public class WayangMultiConditionJoinVisitor extends WayangRelNodeVisitor<Wayang
                 rightTableName,
                 rightFieldNames);
 
-        childOpLeft.connectTo(0, join, 0);
-        childOpRight.connectTo(0, join, 1);
+        // records with a NULL in any key field never match, so they are dropped before the join
+        filterNullJoinKeys(childOpLeft, wayangRelNode.getLeft(), leftTableKeyIndexes).connectTo(0, join, 0);
+        filterNullJoinKeys(childOpRight, wayangRelNode.getRight(), rightTableKeyIndexes).connectTo(0, join, 1);
 
         final SerializableFunction<Tuple2<Record, Record>, Record> mp = new JoinFlattenResult();
 
