@@ -211,7 +211,7 @@ The current snapshot version lives in [`pom.xml`](https://github.com/apache/waya
 ### Runtime requirements
 
 - **Java 17** — set `JAVA_HOME` to your Java 17 installation.
-- **Apache Spark 3.4.4** with Scala 2.12 — set `SPARK_HOME`.
+- **Apache Spark 3.5.x** with Scala 2.12 — set `SPARK_HOME`.
 - **Apache Hadoop 3+** — set `HADOOP_HOME`.
 - **Maven** for building from source.
 

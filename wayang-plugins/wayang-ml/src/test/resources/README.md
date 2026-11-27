@@ -96,8 +96,8 @@ You first have to build the binaries as shown [here](guides/tutorial.md).
 Once you have the binaries built, follow these steps to install Wayang:
 
 ```shell
-tar -xvf wayang-1.0.1-SNAPSHOT.tar.gz
-cd wayang-1.0.1-SNAPSHOT
+tar -xvf wayang-1.1.2-SNAPSHOT.tar.gz
+cd wayang-1.1.2-SNAPSHOT
 ```
 
 In linux
@@ -118,7 +118,7 @@ source ~/.zshrc
 Apache Wayang relies on external execution engines and Java to function correctly. Below are the updated runtime requirements:
 
 - **Java 17**: Make sure `JAVA_HOME` is correctly set to your Java 17 installation.
-- **Apache Spark 3.4.4**: Compatible with Scala 2.12. Set the `SPARK_HOME` environment variable.
+- **Apache Spark 3.5.x**: Compatible with Scala 2.12. Set the `SPARK_HOME` environment variable.
 - **Apache Hadoop 3+**: Set the `HADOOP_HOME` environment variable.
 
 > 🛠️ **Note:** When using Java 17, you _must_ add JVM flags to allow Wayang and Spark to access internal Java APIs, or you will encounter `IllegalAccessError`. See below.
@@ -135,7 +135,7 @@ bin/wayang-submit org.apache.wayang.apps.wordcount.Main java file://$(pwd)/READM
 
 When running Wayang applications using Java 17 (especially with Spark), you must add JVM flags to open specific internal Java modules. These flags resolve access issues with `sun.nio.ch.DirectBuffer` and others.
 
-Update your `wayang-submit` (wayang-assembly/target/wayang-1.0.1-SNAPSHOT/bin/wayang-submit) script (or command) with:
+Update your `wayang-submit` (wayang-assembly/target/wayang-1.1.2-SNAPSHOT/bin/wayang-submit) script (or command) with:
 
 ```bash
 eval "$RUNNER \
@@ -158,7 +158,7 @@ Wayang is available via Maven Central. To use it with Maven, include the followi
 <dependency>
   <groupId>org.apache.wayang</groupId>
   <artifactId>wayang-***</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.1</version>
 </dependency>
 ```
 Note the `***`: Wayang ships with multiple modules that can be included in your app, depending on how you want to use it:
@@ -168,7 +168,7 @@ Note the `***`: Wayang ships with multiple modules that can be included in your 
 * `wayang-java`, `wayang-spark`, `wayang-giraph`, `wayang-sqlite3`, `wayang-postgres`: adapters for the various supported processing platforms
 * `wayang-profiler`: provides functionality to learn operator and UDF cost functions from historical execution data
 
-> **NOTE:** The module `wayang-api-scala-java` is intended to be used with Java 11 and Scala 2.12.
+> **NOTE:** The module `wayang-api-scala-java` is intended to be used with Java 17 and Scala 2.12.
 
 For the sake of version flexibility, you still have to include in the POM file your Hadoop (`hadoop-hdfs` and `hadoop-common`) and Spark (`spark-core` and `spark-graphx`) version of choice.
 
@@ -188,7 +188,7 @@ Apache Wayang is built with Java 17 and Scala 2.12. However, to run Apache Wayan
 ```
 Java 17
 Scala 2.12.17
-Spark 3.4.4, Compatible with Scala 2.12.
+Spark 3.5.x, Compatible with Scala 2.12.
 Maven
 ```
 
@@ -210,7 +210,7 @@ If you need to rebuild Wayang, e.g., to use a different Scala version, you can s
     ```
 > **NOTE:** If you receive an error about not finding `MathExBaseVisitor`, then the problem might be that you are trying to build from IntelliJ, without Maven. MathExBaseVisitor is generated code, and a Maven build should generate it automatically.
 
-> **NOTE:**: In the current Maven setup, Wayang supports Java 17. The default Scala version is 2.12.17, which is compatible with Java 17. Ensure that your Spark distribution is also built with Scala 2.12 (e.g., `spark-3.4.4-bin-hadoop3-scala2.12`).
+> **NOTE:**: In the current Maven setup, Wayang supports Java 17. The default Scala version is 2.12.17, which is compatible with Java 17. Ensure that your Spark distribution is also built with Scala 2.12 (e.g., `spark-3.5.x-bin-hadoop3-scala2.12`).
 
 > **NOTE:** For compiling and testing the code it is required to have Hadoop installed on your machine.
 
@@ -229,7 +229,7 @@ If you need to rebuild Wayang, e.g., to use a different Scala version, you can s
 --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \
 
 >
-> Also, note the `distro` profile, which assembles a binary Wayang distribution.
+> Also, note the `distribution` profile, which assembles a binary Wayang distribution.
 To activate these profiles, you need to specify them when running maven, i.e.,
 
 ```shell
