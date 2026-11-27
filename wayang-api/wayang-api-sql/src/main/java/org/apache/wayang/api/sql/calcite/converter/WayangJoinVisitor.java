@@ -72,9 +72,9 @@ public class WayangJoinVisitor extends WayangRelNodeVisitor<WayangJoin> {
                 new TransformationDescriptor<>(new JoinKeyExtractor(leftKeyIndex), Record.class, Object.class),
                 new TransformationDescriptor<>(new JoinKeyExtractor(rightKeyIndex), Record.class, Object.class));
 
-        // call connectTo on both operators (left and right)
-        childOpLeft.connectTo(0, join, 0);
-        childOpRight.connectTo(0, join, 1);
+        // call connectTo on both operators (left and right), without the records whose key is NULL
+        filterNullJoinKeys(childOpLeft, wayangRelNode.getInput(0), leftKeyIndex).connectTo(0, join, 0);
+        filterNullJoinKeys(childOpRight, wayangRelNode.getInput(1), rightKeyIndex).connectTo(0, join, 1);
 
         // Join returns Tuple2 - map to a Record
         final MapOperator<Tuple2<Record, Record>, Record> mapOperator = new MapOperator<>(

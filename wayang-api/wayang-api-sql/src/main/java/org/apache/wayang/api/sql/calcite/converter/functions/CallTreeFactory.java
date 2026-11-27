@@ -26,6 +26,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUnknownAs;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Sarg;
@@ -98,7 +99,7 @@ final class Literal implements Node {
             case SARG         -> {
                 final Sarg<?> sarg = literal.getValueAs(Sarg.class);
                 assert sarg.rangeSet instanceof Serializable : "Sarg RangeSet was not serializable.";
-                yield (ImmutableRangeSet<?>) sarg.rangeSet;
+                yield new SargValue((ImmutableRangeSet<?>) sarg.rangeSet, sarg.nullAs);
             }
             default -> throw new UnsupportedOperationException(
                     "Literal conversion to Java not implemented, type: " + literal.getTypeName());
@@ -109,6 +110,13 @@ final class Literal implements Node {
     public Object evaluate(final Record rec) {
         return value;
     }
+}
+
+/**
+ * Serializable form of a {@link Sarg}: its ranges, and what the search returns for a
+ * NULL value (for example TRUE for {@code x IN (1, 2) OR x IS NULL}).
+ */
+record SargValue(ImmutableRangeSet<?> rangeSet, RexUnknownAs nullAs) implements Serializable {
 }
 
 final class InputRef implements Node {

@@ -1,0 +1,5 @@
+col1:int,col2:int,col3:string
+1;10;a
+;20;b
+3;;c
+;;d
